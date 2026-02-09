@@ -12,9 +12,6 @@ ENV/
 .installed.cfg
 *.egg
 
-# Copilot SDK (cloned repository, not our code)
-copilot-sdk/
-
 # VS Code
 .vscode/
 

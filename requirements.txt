@@ -1,0 +1,5 @@
+Flask @ file:///home/ktietz/src/ci/flask_1611932660458/work
+openpyxl @ file:///tmp/build/80754af9/openpyxl_1632777717936/work
+pandas==1.4.2
+requests==2.32.5
+requests-file @ file:///Users/ktietz/demo/mc3/conda-bld/requests-file_1629455781986/work
