@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+ENV/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Copilot SDK (cloned repository, not our code)
+copilot-sdk/
+
+# VS Code
+.vscode/
+
+# Test files
+test_*.py
+*_test.py
+
+# Generated files
+# *.html  # Commented out to include templates
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~

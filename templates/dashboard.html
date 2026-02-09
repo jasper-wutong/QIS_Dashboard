@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QIS SubBook Dashboard - {{ date_str }}</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #283548;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --yellow: #fbbf24;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ──────────────────────────────── */
+  .header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header .date-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .header .date-badge strong { color: var(--accent); }
+  .refresh-btn {
+    padding: 7px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  /* ── Container ───────────────────────────── */
+  .container { max-width: 1640px; margin: 0 auto; padding: 20px 40px 60px; }
+
+  /* ── Section Title ───────────────────────── */
+  .section-group { margin-bottom: 32px; }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title h2 { font-size: 17px; font-weight: 600; }
+  .section-title .badge {
+    font-size: 12px;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .badge-index { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .badge-other { background: rgba(129,140,248,0.15); color: var(--accent2); }
+
+  /* ── Summary Grid ────────────────────────── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .s-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .s-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+  .s-card .s-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
+  .s-card .s-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .s-card .s-value.pos { color: var(--green); }
+  .s-card .s-value.neg { color: var(--red); }
+  .s-card .s-value.neutral { color: var(--accent); }
+
+  /* ── Aggregate Banner ────────────────────── */
+  .agg-banner {
+    background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(129,140,248,0.08));
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .agg-banner .agg-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+  .agg-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 10px;
+  }
+  .agg-item { background: rgba(15,23,42,0.5); border-radius: 8px; padding: 12px 14px; }
+  .agg-item .agg-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .agg-item .agg-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .agg-item .agg-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* ── Tabs ─────────────────────────────────── */
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tab {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .tab:hover { background: var(--surface2); color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .tab .cnt {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 10px;
+    margin-left: 5px;
+  }
+
+  /* ── Toolbar ──────────────────────────────── */
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .search-box { flex: 1; max-width: 340px; position: relative; }
+  .search-box input {
+    width: 100%;
+    padding: 9px 14px 9px 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); width: 15px; height: 15px; }
+  .row-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+  .btn {
+    padding: 7px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  /* ── Table ───────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    max-height: 520px;
+    overflow-y: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+    padding: 11px 12px;
+    border-bottom: 2px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    text-align: left;
+    z-index: 2;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th.sort-asc::after { content: " ▲"; color: var(--accent); font-size: 10px; }
+  thead th.sort-desc::after { content: " ▼"; color: var(--accent); font-size: 10px; }
+  tbody tr { border-bottom: 1px solid rgba(51,65,85,0.5); transition: background 0.12s; }
+  tbody tr:hover { background: rgba(56,189,248,0.06); }
+  tbody tr:nth-child(even) { background: rgba(30,41,59,0.4); }
+  tbody tr:nth-child(even):hover { background: rgba(56,189,248,0.06); }
+  td { padding: 9px 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.pos { color: var(--green); }
+  td.neg { color: var(--red); }
+
+  .sb-badge { display: inline-block; padding: 2px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .sb-QISARES { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .sb-QISAUTO { background: rgba(129,140,248,0.15); color: var(--accent2); }
+  .sb-QISBTL { background: rgba(52,211,153,0.15); color: var(--green); }
+  .sb-QISCMARS { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .sb-QISCZBC { background: rgba(244,114,182,0.15); color: var(--pink); }
+  .sb-QISMMA { background: rgba(251,191,36,0.15); color: var(--yellow); }
+
+  .no-data { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+  .loading { text-align: center; padding: 60px; color: var(--text-muted); font-size: 15px; }
+
+  ::-webkit-scrollbar { height: 7px; width: 7px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* ── Research Panel ────────────────────── */
+  .research-overlay {
+    display: none;
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+  }
+  .research-overlay.show { display: block; }
+  .research-panel {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(600px, 90vw);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 201;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s;
+    box-shadow: -4px 0 30px rgba(0,0,0,0.4);
+  }
+  .research-panel.show { transform: translateX(0); }
+  .research-panel-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .research-panel-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .research-panel-close {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 22px; cursor: pointer; padding: 4px 8px;
+  }
+  .research-panel-close:hover { color: var(--text); }
+  .research-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+  .research-panel-body .loading-spinner {
+    text-align: center;
+    padding: 60px 0;
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+  .research-panel-body .error-msg {
+    color: var(--red);
+    padding: 20px;
+    background: rgba(248,113,113,0.1);
+    border-radius: 8px;
+  }
+  .research-panel-body .model-tag {
+    display: inline-block;
+    background: rgba(56,189,248,0.15);
+    color: var(--accent);
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .research-btn {
+    padding: 4px 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .research-btn:hover { opacity: 0.85; }
+  .research-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  /* ── Batch Research Progress ──────────── */
+  .batch-progress {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .batch-progress .bp-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .batch-progress .bp-bar-wrap {
+    background: var(--bg);
+    border-radius: 6px;
+    height: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .batch-progress .bp-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 6px;
+    transition: width 0.4s;
+  }
+  .batch-progress .bp-status {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .batch-result-list {
+    padding: 0;
+  }
+  .batch-result-item {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .batch-result-item:hover { background: rgba(56,189,248,0.06); }
+  .batch-result-item .bri-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+  }
+  .batch-result-item .bri-name {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .batch-result-item .bri-status {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+  }
+  .bri-status.ok { background: rgba(52,211,153,0.15); color: var(--green); }
+  .bri-status.err { background: rgba(248,113,113,0.15); color: var(--red); }
+  .bri-status.pending { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+  .bri-status.cached { background: rgba(251,191,36,0.15); color: var(--yellow); }
+  .bri-status.analyzing { background: rgba(56,189,248,0.15); color: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .batch-result-item .bri-body {
+    display: none;
+    padding: 0 24px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .batch-result-item.expanded .bri-body { display: block; }
+
+  .research-all-btn {
+    padding: 7px 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: opacity 0.2s;
+  }
+  .research-all-btn:hover { opacity: 0.85; }
+  .research-all-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  @media (max-width: 900px) {
+    .container { padding: 14px; }
+    .header { padding: 14px; }
+    .agg-grid { grid-template-columns: repeat(2, 1fr); }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 QIS SubBook Dashboard</h1>
+  <div class="header-right">
+    <button class="refresh-btn" onclick="refreshData()">🔄 刷新数据</button>
+    <div class="date-badge">Data: <strong id="dateLabel">{{ date_str }}</strong> &nbsp;|&nbsp; {{ now_time }}</div>
+  </div>
+</div>
+
+<div class="container" id="mainContainer">
+  <div class="loading" id="loadingMsg">加载数据中...</div>
+
+  <div id="dashboardContent" style="display:none;">
+    <!-- ── 总汇总 Banner ───────────────────── -->
+    <div class="agg-banner">
+      <div class="agg-title">📋 总汇总 &mdash; 指数 + 其他标的物</div>
+      <div class="agg-grid" id="aggGrid"></div>
+    </div>
+
+    <!-- ── 指数 Section ────────────────────── -->
+    <div class="section-group" id="indexSection">
+      <div class="section-title">
+        <h2>📈 指数</h2>
+        <span class="badge badge-index" id="indexBadge"></span>
+      </div>
+      <div class="summary-grid" id="indexSummary"></div>
+      <div class="tabs" id="indexTabs"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="indexSearch" placeholder="搜索指数...">
+        </div>
+        <span class="row-count" id="indexRowCount"></span>
+        <button class="btn" onclick="exportCSV('index')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="indexHeader"></tr></thead><tbody id="indexBody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ── 其他标的物 Section ──────────────── -->
+    <div class="section-group" id="otherSection">
+      <div class="section-title">
+        <h2>📊 其他标的物（按 Wind Ticker 合并）</h2>
+        <span class="badge badge-other" id="otherBadge"></span>
+      </div>
+      <div class="summary-grid" id="otherSummary"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="otherSearch" placeholder="搜索标的物...">
+        </div>
+        <span class="row-count" id="otherRowCount"></span>
+        <button class="research-all-btn" id="researchAllBtn" onclick="doResearchAll()">🔬 一键研究全部</button>
+        <button class="btn" onclick="exportCSV('other')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="otherHeader"></tr></thead><tbody id="otherBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Research Panel -->
+<div class="research-overlay" id="researchOverlay" onclick="closeResearchPanel()"></div>
+<div class="research-panel" id="researchPanel">
+  <div class="research-panel-header">
+    <h3 id="researchPanelTitle">🔍 研究分析</h3>
+    <button class="research-panel-close" onclick="closeResearchPanel()">&times;</button>
+  </div>
+  <div class="research-panel-body" id="researchPanelBody">
+    <div class="loading-spinner">点击表格中的「研究」按钮加载分析...</div>
+  </div>
+</div>
+
+<script>
+// ── Globals ───────────────────────────────────
+let COLUMNS, INDEX_DATA, OTHER_DATA, SUBBOOKS;
+let INDEX_SUMMARY, OTHER_SUMMARY, TOTAL_SUMMARY;
+let INDEX_SB, OTHER_SB;
+let colIdx, idxShowI, othShowI, sbI;
+let researchCache = {};  // {name: {ok, name, model, content}}
+let batchRunning = false;
+
+const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","Vega($)","Theta","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","SubBook","BookID"];
+const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","风险敞口","__research__"];
+
+const numCols = new Set(["现价","涨跌幅","Delta($)","SOD Delta($)","PDE Delta($)","%Gamma($)","PDE Gamma(%)","Vega($)","FX Vega($)","Theta","现货市值","期货市值","风险敞口","T+1 风险敞口","风险敞口(PDE)","当日损益","当日损益(PDE)","当日损益(合约端)","当日损益(对冲端)","存续名义本金","Delta Shares","Open Shares","Need To Trade","Exposure pnl","Gamma pnl","Theta pnl","Vega pnl","Borrow pnl","Residual"]);
+const colorCols = new Set(["涨跌幅","当日损益","当日损益(合约端)","当日损益(对冲端)","Delta($)","Theta","Vega($)"]);
+
+const state = {
+  index: { book: "ALL", sortCol: -1, sortDir: 0, filtered: [] },
+  other: { book: "ALL", sortCol: -1, sortDir: 0, filtered: [] }
+};
+
+// ── Formatters ────────────────────────────────
+function fmt(v) {
+  if (v === null || v === undefined) return "-";
+  if (typeof v === "number") {
+    if (Math.abs(v) >= 1e8) return (v/1e8).toFixed(2) + "亿";
+    if (Math.abs(v) >= 1e4) return (v/1e4).toFixed(2) + "万";
+    return v.toLocaleString("en-US", {maximumFractionDigits:2});
+  }
+  return String(v);
+}
+function fmtPct(v) {
+  if (v === null || v === undefined) return "-";
+  return (v * 100).toFixed(2) + "%";
+}
+function fmtBig(v) {
+  if (Math.abs(v) >= 1e8) return (v/1e8).toFixed(2) + "亿";
+  if (Math.abs(v) >= 1e4) return (v/1e4).toFixed(2) + "万";
+  return v.toLocaleString("en-US", {maximumFractionDigits:0});
+}
+function valCls(v) { return v > 0 ? "pos" : v < 0 ? "neg" : "neutral"; }
+
+// ── Load data from API ────────────────────────
+async function loadData() {
+  const resp = await fetch("/api/data");
+  const d = await resp.json();
+
+  COLUMNS = d.columns;
+  INDEX_DATA = d.index_data;
+  OTHER_DATA = d.other_data;
+  SUBBOOKS = d.subbooks;
+  INDEX_SUMMARY = d.index_summary;
+  OTHER_SUMMARY = d.other_summary;
+  TOTAL_SUMMARY = d.total_summary;
+  INDEX_SB = d.index_sb;
+  OTHER_SB = d.other_sb;
+
+  colIdx = {};
+  COLUMNS.forEach((c,i) => colIdx[c] = i);
+  idxShowI = SHOW_COLS_INDEX.map(c => colIdx[c]).filter(i => i !== undefined);
+  othShowI = SHOW_COLS_OTHER.map(c => c === '__research__' ? -999 : colIdx[c]).filter(i => i !== undefined || i === -999);
+  sbI = colIdx["SubBook"];
+
+  state.index.filtered = [...INDEX_DATA];
+  state.index.book = "ALL"; state.index.sortCol = -1; state.index.sortDir = 0;
+  state.other.filtered = [...OTHER_DATA];
+  state.other.book = "ALL"; state.other.sortCol = -1; state.other.sortDir = 0;
+
+  document.getElementById("dateLabel").textContent = d.date_str;
+  document.getElementById("loadingMsg").style.display = "none";
+  document.getElementById("dashboardContent").style.display = "block";
+
+  renderAll();
+}
+
+function renderAll() {
+  renderAgg();
+  renderSummaryCards("indexSummary", INDEX_SUMMARY, "index");
+  renderSummaryCards("otherSummary", OTHER_SUMMARY, "other");
+  document.getElementById("indexBadge").textContent = INDEX_SUMMARY.count + " 行";
+  document.getElementById("otherBadge").textContent = OTHER_DATA.length + " 个标的";
+  renderTabs("index");
+  renderHeader("index");
+  renderHeader("other");
+  applyFilter("index");
+  applyFilter("other");
+}
+
+// ── Refresh ───────────────────────────────────
+async function refreshData() {
+  document.getElementById("dashboardContent").style.display = "none";
+  document.getElementById("loadingMsg").style.display = "block";
+  document.getElementById("loadingMsg").textContent = "刷新数据中...";
+  researchCache = {};
+  await fetch("/api/refresh");
+  await loadData();
+}
+
+// ── Aggregate Banner ──────────────────────────
+function renderAgg() {
+  const items = [
+    {label:"持仓总数", val:TOTAL_SUMMARY.count, sub:`指数 ${INDEX_SUMMARY.count} / 其他 ${OTHER_SUMMARY.count}`},
+    {label:"汇总 Delta($)", val:TOTAL_SUMMARY.delta, sub:`指 ${fmtBig(INDEX_SUMMARY.delta)} / 其 ${fmtBig(OTHER_SUMMARY.delta)}`},
+    {label:"汇总 SOD Delta($)", val:TOTAL_SUMMARY.sod_delta, sub:`指 ${fmtBig(INDEX_SUMMARY.sod_delta)} / 其 ${fmtBig(OTHER_SUMMARY.sod_delta)}`},
+    {label:"汇总 Theta($)", val:TOTAL_SUMMARY.theta, sub:`指 ${fmtBig(INDEX_SUMMARY.theta)} / 其 ${fmtBig(OTHER_SUMMARY.theta)}`},
+    {label:"汇总 Vega($)", val:TOTAL_SUMMARY.vega, sub:`指 ${fmtBig(INDEX_SUMMARY.vega)} / 其 ${fmtBig(OTHER_SUMMARY.vega)}`},
+    {label:"汇总 %Gamma($)", val:TOTAL_SUMMARY.gamma, sub:`指 ${fmtBig(INDEX_SUMMARY.gamma)} / 其 ${fmtBig(OTHER_SUMMARY.gamma)}`},
+    {label:"汇总 当日损益", val:TOTAL_SUMMARY.pnl, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl)} / 其 ${fmtBig(OTHER_SUMMARY.pnl)}`},
+    {label:"汇总 风险敞口", val:TOTAL_SUMMARY.exposure, sub:`指 ${fmtBig(INDEX_SUMMARY.exposure)} / 其 ${fmtBig(OTHER_SUMMARY.exposure)}`},
+    {label:"汇总 存续名义本金", val:TOTAL_SUMMARY.notional, sub:`指 ${fmtBig(INDEX_SUMMARY.notional)} / 其 ${fmtBig(OTHER_SUMMARY.notional)}`},
+    {label:"损益(合约端)", val:TOTAL_SUMMARY.pnl_contract, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_contract)} / 其 ${fmtBig(OTHER_SUMMARY.pnl_contract)}`},
+    {label:"损益(对冲端)", val:TOTAL_SUMMARY.pnl_hedge, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_hedge)} / 其 ${fmtBig(OTHER_SUMMARY.pnl_hedge)}`},
+  ];
+  document.getElementById("aggGrid").innerHTML = items.map(it => `
+    <div class="agg-item">
+      <div class="agg-label">${it.label}</div>
+      <div class="agg-val ${typeof it.val === 'number' ? valCls(it.val) : 'neutral'}">${typeof it.val === 'number' ? fmtBig(it.val) : it.val}</div>
+      <div class="agg-sub">${it.sub}</div>
+    </div>
+  `).join("");
+}
+
+// ── Summary Cards ─────────────────────────────
+function renderSummaryCards(elId, summary, kind) {
+  const keys = [
+    ["Delta($)", "delta"], ["SOD Delta($)", "sod_delta"], ["Theta($)", "theta"],
+    ["Vega($)", "vega"], ["%Gamma($)", "gamma"], ["当日损益", "pnl"],
+    ["风险敞口", "exposure"], ["存续名义本金", "notional"],
+    ["损益(合约端)", "pnl_contract"], ["损益(对冲端)", "pnl_hedge"],
+  ];
+  document.getElementById(elId).innerHTML = keys.map(([lbl, key]) => `
+    <div class="s-card">
+      <div class="s-label">${lbl}</div>
+      <div class="s-value ${valCls(summary[key])}">${fmtBig(summary[key])}</div>
+    </div>
+  `).join("");
+}
+
+function getSummary(kind, book) {
+  if (book === "ALL") return kind === "index" ? INDEX_SUMMARY : OTHER_SUMMARY;
+  const map = kind === "index" ? INDEX_SB : OTHER_SB;
+  return map[book] || {count:0,delta:0,sod_delta:0,vega:0,theta:0,gamma:0,exposure:0,pnl:0,pnl_contract:0,pnl_hedge:0,notional:0};
+}
+
+// ── Tabs (only for 指数) ──────────────────────
+function renderTabs(kind) {
+  if (kind === "other") return;
+  const s = state[kind];
+  const data = INDEX_DATA;
+  const sbMap = INDEX_SB;
+  const el = document.getElementById(kind + "Tabs");
+  const total = data.length;
+  let html = `<div class="tab ${s.book==='ALL'?'active':''}" onclick="setBook('${kind}','ALL')">全部<span class="cnt">${total}</span></div>`;
+  SUBBOOKS.forEach(sb => {
+    if (!sbMap[sb]) return;
+    html += `<div class="tab ${s.book===sb?'active':''}" onclick="setBook('${kind}','${sb}')">${sb}<span class="cnt">${sbMap[sb].count}</span></div>`;
+  });
+  el.innerHTML = html;
+}
+
+function setBook(kind, b) {
+  state[kind].book = b;
+  renderTabs(kind);
+  renderSummaryCards(kind + "Summary", getSummary(kind, b), kind);
+  applyFilter(kind);
+}
+
+// ── Table Headers ─────────────────────────────
+function renderHeader(kind) {
+  const s = state[kind];
+  const cols = kind === "index" ? idxShowI : othShowI;
+  const tr = document.getElementById(kind + "Header");
+  tr.innerHTML = cols.map((ci, si) => {
+    if (ci === -999) return `<th>研究</th>`;
+    let cls = s.sortCol === si ? (s.sortDir === 1 ? "sort-asc" : "sort-desc") : "";
+    return `<th class="${cls}" onclick="doSort('${kind}',${si})">${COLUMNS[ci]}</th>`;
+  }).join("");
+}
+
+function doSort(kind, si) {
+  const s = state[kind];
+  if (s.sortCol === si) s.sortDir = s.sortDir === 1 ? -1 : s.sortDir === -1 ? 0 : 1;
+  else { s.sortCol = si; s.sortDir = 1; }
+  renderHeader(kind);
+  applyFilter(kind);
+}
+
+// ── Filter & Render ───────────────────────────
+function applyFilter(kind) {
+  const s = state[kind];
+  const src = kind === "index" ? INDEX_DATA : OTHER_DATA;
+  const showI = kind === "index" ? idxShowI : othShowI;
+  const q = document.getElementById(kind + "Search").value.toLowerCase();
+
+  s.filtered = src.filter(r => {
+    if (kind === "index" && s.book !== "ALL" && r[sbI] !== s.book) return false;
+    if (q) return showI.some(ci => ci >= 0 && r[ci] !== null && String(r[ci]).toLowerCase().includes(q));
+    return true;
+  });
+
+  if (s.sortDir !== 0 && s.sortCol >= 0) {
+    const ci = showI[s.sortCol];
+    s.filtered.sort((a,b) => {
+      let va=a[ci], vb=b[ci];
+      if (va===null) return 1; if (vb===null) return -1;
+      if (typeof va==="number" && typeof vb==="number") return (va-vb)*s.sortDir;
+      return String(va).localeCompare(String(vb))*s.sortDir;
+    });
+  }
+  renderTable(kind);
+}
+
+function renderTable(kind) {
+  const s = state[kind];
+  const showI = kind === "index" ? idxShowI : othShowI;
+  const tbody = document.getElementById(kind + "Body");
+  document.getElementById(kind + "RowCount").textContent = s.filtered.length + " rows";
+
+  if (!s.filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="${showI.length}" class="no-data">无匹配记录</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = s.filtered.map(row => "<tr>" + showI.map(ci => {
+    if (ci === -999) {
+      const tickerName = row[colIdx['名称']] || row[colIdx['标的物']] || '';
+      const price = row[colIdx['现价']];
+      const change = row[colIdx['涨跌幅']];
+      const exposure = row[colIdx['风险敞口']];
+      const pStr = price !== null && price !== undefined ? String(price) : 'NA';
+      const cStr = change !== null && change !== undefined ? String(change) : 'NA';
+      const eStr = exposure !== null && exposure !== undefined ? String(exposure) : 'NA';
+      const escaped = tickerName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `<td><button class="research-btn" onclick="doResearch('${escaped}','${pStr}','${cStr}','${eStr}')">🔍 研究</button></td>`;
+    }
+    const col = COLUMNS[ci], v = row[ci];
+    if (col === "SubBook") return `<td><span class="sb-badge sb-${v}">${v}</span></td>`;
+    const isNum = numCols.has(col) && typeof v === "number";
+    let cls = isNum ? "num" : "";
+    if (isNum && colorCols.has(col)) { if (v > 0) cls += " pos"; else if (v < 0) cls += " neg"; }
+    const display = (col === "涨跌幅" && typeof v === "number") ? fmtPct(v) : fmt(v);
+    return `<td class="${cls}">${display}</td>`;
+  }).join("") + "</tr>").join("");
+}
+
+// ── Export CSV ─────────────────────────────────
+function exportCSV(kind) {
+  const showI = kind === "index" ? idxShowI : othShowI;
+  const data = state[kind].filtered;
+  const hdr = showI.map(ci => COLUMNS[ci]).join(",");
+  const rows = data.map(r => showI.map(ci => {
+    const v = r[ci]; if (v===null) return "";
+    if (typeof v==="string" && v.includes(",")) return `"${v}"`;
+    return v;
+  }).join(","));
+  const csv = "\uFEFF" + hdr + "\n" + rows.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `QIS_${kind}_${document.getElementById("dateLabel").textContent}.csv`;
+  a.click();
+}
+
+// ── Event Listeners ───────────────────────────
+document.getElementById("indexSearch").addEventListener("input", () => applyFilter("index"));
+document.getElementById("otherSearch").addEventListener("input", () => applyFilter("other"));
+
+// ── Research Panel ─────────────────────────────
+function closeResearchPanel() {
+  document.getElementById('researchOverlay').classList.remove('show');
+  document.getElementById('researchPanel').classList.remove('show');
+}
+
+function _renderResearchContent(data) {
+  let html = '';
+  if (data.model) html += `<span class="model-tag">模型: ${data.model}</span>`;
+  if (data.cached) html += `<span class="model-tag" style="background:rgba(251,191,36,0.15);color:var(--yellow);margin-left:6px">缓存</span>`;
+  if (data.model || data.cached) html += '<br><br>';
+  let text = data.content
+    .replace(/### (.+)/g, '<h4 style="color:var(--accent);margin:16px 0 8px;">$1</h4>')
+    .replace(/## (.+)/g, '<h4 style="color:var(--accent);margin:16px 0 8px;">$1</h4>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--accent)">$1</strong>')
+    .replace(/\n\n/g, '</p><p style="margin:10px 0">')
+    .replace(/\n/g, '<br>');
+  html += `<p style="margin:10px 0">${text}</p>`;
+  return html;
+}
+
+async function doResearch(name, price, change, exposure) {
+  const overlay = document.getElementById('researchOverlay');
+  const panel = document.getElementById('researchPanel');
+  const title = document.getElementById('researchPanelTitle');
+  const body = document.getElementById('researchPanelBody');
+
+  const expDisp = exposure && exposure !== 'NA' ? fmtBig(Number(exposure)) : '未知';
+  title.textContent = `🔍 ${name} 研究分析（当前敞口: ${expDisp}）`;
+
+  // Check client-side cache
+  if (researchCache[name]) {
+    const data = researchCache[name];
+    data.cached = true;
+    body.innerHTML = _renderResearchContent(data);
+    overlay.classList.add('show');
+    panel.classList.add('show');
+    return;
+  }
+
+  body.innerHTML = '<div class="loading-spinner">⏳ 正在联网搜索并调用 Copilot SDK 深度分析，请稍候（约60-90秒）...</div>';
+  overlay.classList.add('show');
+  panel.classList.add('show');
+
+  try {
+    const params = new URLSearchParams({name, price, change, exposure: exposure || 'NA'});
+    const resp = await fetch('/api/research?' + params.toString());
+    const data = await resp.json();
+
+    if (data.ok && data.content) {
+      researchCache[name] = data;
+      body.innerHTML = _renderResearchContent(data);
+    } else {
+      const errMsg = data.error || '未返回研究内容';
+      body.innerHTML = `<div class="error-msg">❌ ${errMsg}</div>`;
+      if (data.content) body.innerHTML += `<pre style="margin-top:12px;font-size:12px;color:var(--text-muted)">${data.content}</pre>`;
+    }
+  } catch (err) {
+    body.innerHTML = `<div class="error-msg">❌ 请求失败: ${err.message}</div>`;
+  }
+}
+
+// ── Batch Research All ────────────────────────
+async function doResearchAll() {
+  if (batchRunning) return;
+  batchRunning = true;
+
+  const btn = document.getElementById('researchAllBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 研究中...';
+
+  const overlay = document.getElementById('researchOverlay');
+  const panel = document.getElementById('researchPanel');
+  const title = document.getElementById('researchPanelTitle');
+  const body = document.getElementById('researchPanelBody');
+
+  // Collect all visible tickers from OTHER_DATA
+  const tickers = [];
+  const nameI = colIdx['名称'];
+  const tickerI = colIdx['标的物'];
+  const priceI = colIdx['现价'];
+  const changeI = colIdx['涨跌幅'];
+  const exposureI = colIdx['风险敞口'];
+
+  for (const row of state.other.filtered) {
+    const name = row[nameI] || row[tickerI] || '';
+    if (!name) continue;
+    tickers.push({
+      name,
+      price: row[priceI] !== null && row[priceI] !== undefined ? String(row[priceI]) : 'NA',
+      change: row[changeI] !== null && row[changeI] !== undefined ? String(row[changeI]) : 'NA',
+      exposure: row[exposureI] !== null && row[exposureI] !== undefined ? String(row[exposureI]) : 'NA',
+    });
+  }
+
+  if (!tickers.length) {
+    btn.disabled = false;
+    btn.textContent = '🔬 一键研究全部';
+    batchRunning = false;
+    return;
+  }
+
+  // Split into batches of 8
+  const BATCH_SIZE = 8;
+  const batches = [];
+  for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    batches.push(tickers.slice(i, i + BATCH_SIZE));
+  }
+
+  // Open panel with progress view
+  title.textContent = `🔬 批量研究全部标的（共 ${tickers.length} 个）`;
+  overlay.classList.add('show');
+  panel.classList.add('show');
+
+  // Build progress + result list HTML
+  let completedCount = 0;
+  let currentBatchIdx = -1;
+  let currentBatchNames = [];
+  let batchStartTime = null;
+  const tickerStatus = {};  // name -> 'pending' | 'ok' | 'err' | 'cached' | 'analyzing'
+  tickers.forEach(t => { tickerStatus[t.name] = researchCache[t.name] ? 'cached' : 'pending'; });
+
+  function renderBatchPanel() {
+    const cachedCount = Object.values(tickerStatus).filter(s => s === 'cached').length;
+    const okCount = Object.values(tickerStatus).filter(s => s === 'ok').length;
+    const errCount = Object.values(tickerStatus).filter(s => s === 'err').length;
+    const analyzingCount = Object.values(tickerStatus).filter(s => s === 'analyzing').length;
+    const doneCount = cachedCount + okCount + errCount;
+    const pct = Math.round(doneCount / tickers.length * 100);
+
+    let batchInfo = '';
+    if (currentBatchIdx >= 0 && currentBatchIdx < batches.length) {
+      const elapsed = batchStartTime ? Math.round((Date.now() - batchStartTime) / 1000) : 0;
+      batchInfo = `<div style="margin-top:8px;padding:10px 14px;background:rgba(56,189,248,0.08);border-radius:8px;font-size:12px;">
+        <span style="color:var(--accent);font-weight:600;">⏳ 正在分析第 ${currentBatchIdx + 1}/${batches.length} 批</span>
+        <span style="color:var(--text-muted);margin-left:8px;">已耗时 ${elapsed}s</span>
+        <div style="margin-top:4px;color:var(--text-muted);">当前批次: ${currentBatchNames.join('、')}</div>
+      </div>`;
+    } else if (doneCount === tickers.length) {
+      batchInfo = `<div style="margin-top:8px;padding:10px 14px;background:rgba(52,211,153,0.08);border-radius:8px;font-size:12px;color:var(--green);font-weight:600;">
+        ✅ 全部分析完成！点击标的名称展开查看分析结果
+      </div>`;
+    }
+
+    let html = `<div class="batch-progress">
+      <div class="bp-title">批量研究进度</div>
+      <div class="bp-bar-wrap"><div class="bp-bar" style="width:${pct}%"></div></div>
+      <div class="bp-status">已完成 ${doneCount}/${tickers.length}（${cachedCount} 缓存, ${okCount} 新分析, ${errCount} 失败）· 共 ${batches.length} 批, 每批 ${BATCH_SIZE} 个</div>
+      ${batchInfo}
+    </div>`;
+
+    html += '<div class="batch-result-list">';
+    tickers.forEach(t => {
+      const st = tickerStatus[t.name];
+      const statusLabel = st === 'ok' ? '完成' : st === 'cached' ? '缓存' : st === 'err' ? '失败' : st === 'analyzing' ? '分析中...' : '等待中';
+      const cached = researchCache[t.name];
+      const hasContent = cached && cached.content;
+      html += `<div class="batch-result-item ${hasContent ? '' : ''}" onclick="this.classList.toggle('expanded')">
+        <div class="bri-header">
+          <span class="bri-name">${t.name}</span>
+          <span class="bri-status ${st}">${statusLabel}</span>
+        </div>
+        <div class="bri-body">${hasContent ? _renderResearchContent(cached) : (st === 'err' ? '<span style="color:var(--red)">分析失败</span>' : '')}</div>
+      </div>`;
+    });
+    html += '</div>';
+
+    body.innerHTML = html;
+  }
+
+  renderBatchPanel();
+
+  // Timer to update elapsed time every 5 seconds
+  const progressTimer = setInterval(() => {
+    if (currentBatchIdx >= 0 && currentBatchIdx < batches.length) {
+      renderBatchPanel();
+    }
+  }, 5000);
+
+  // Process batches sequentially
+  for (let bi = 0; bi < batches.length; bi++) {
+    const batch = batches[bi];
+    currentBatchIdx = bi;
+    currentBatchNames = batch.map(t => t.name);
+    batchStartTime = Date.now();
+
+    // Mark tickers in this batch as 'analyzing'
+    batch.forEach(t => {
+      if (tickerStatus[t.name] === 'pending') {
+        tickerStatus[t.name] = 'analyzing';
+      }
+    });
+    renderBatchPanel();
+
+    try {
+      const resp = await fetch('/api/research/batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tickers: batch}),
+      });
+      const data = await resp.json();
+
+      if (data.results) {
+        for (const r of data.results) {
+          if (r.ok && r.content) {
+            researchCache[r.name] = r;
+            tickerStatus[r.name] = r.cached ? 'cached' : 'ok';
+          } else {
+            tickerStatus[r.name] = 'err';
+          }
+        }
+      } else {
+        batch.forEach(t => { tickerStatus[t.name] = 'err'; });
+      }
+    } catch (err) {
+      batch.forEach(t => { tickerStatus[t.name] = 'err'; });
+    }
+
+    renderBatchPanel();
+  }
+
+  clearInterval(progressTimer);
+  currentBatchIdx = batches.length;  // signal "done"
+  renderBatchPanel();
+
+  btn.disabled = false;
+  btn.textContent = '🔬 一键研究全部';
+  batchRunning = false;
+}
+
+// ── Init ──────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
