@@ -5,6 +5,59 @@
 import re
 import pandas as pd
 
+# ── 板块分类 ─────────────────────────────────────────────────────────────────
+SECTOR_ORDER = [
+    "贵金属", "有色金属", "焦煤钢矿", "非金属建材", "能源", "化工",
+    "油脂油料", "软商品", "农副产品", "谷物", "航运", "股", "债", "其他"
+]
+
+SECTOR_ICONS = {
+    "贵金属": "🥇", "有色金属": "🔩", "焦煤钢矿": "⛏️", "非金属建材": "🧱",
+    "能源": "⛽", "化工": "🧪", "油脂油料": "🫒", "软商品": "🍬",
+    "农副产品": "🐷", "谷物": "🌾", "航运": "🚢", "股": "📈", "债": "💰", "其他": "📦"
+}
+
+# 合约前缀 → 板块
+SECTOR_MAP = {
+    # 贵金属
+    "AG": "贵金属", "AU": "贵金属", "GC": "贵金属", "SI": "贵金属",
+    # 有色金属
+    "CU": "有色金属", "NI": "有色金属", "ZN": "有色金属", "AL": "有色金属",
+    "PB": "有色金属", "SN": "有色金属", "SS": "有色金属", "BC": "有色金属", "HG": "有色金属",
+    # 焦煤钢矿
+    "HC": "焦煤钢矿", "RB": "焦煤钢矿", "I": "焦煤钢矿", "J": "焦煤钢矿", "JM": "焦煤钢矿",
+    "SF": "焦煤钢矿", "SM": "焦煤钢矿",
+    # 非金属建材
+    "FG": "非金属建材", "SA": "非金属建材",
+    # 能源
+    "SC": "能源", "LU": "能源", "NR": "能源", "BU": "能源", "RU": "能源", "FU": "能源",
+    "CO": "能源", "CL": "能源", "PG": "能源", "ZC": "能源",
+    # 化工
+    "EG": "化工", "L": "化工", "PP": "化工", "EB": "化工", "V": "化工",
+    "MA": "化工", "TA": "化工", "PF": "化工", "UR": "化工", "SP": "化工",
+    # 油脂油料
+    "M": "油脂油料", "P": "油脂油料", "Y": "油脂油料", "OI": "油脂油料",
+    "RM": "油脂油料", "PK": "油脂油料",
+    # 软商品
+    "CF": "软商品", "SR": "软商品", "AP": "软商品", "CJ": "软商品", "CY": "软商品",
+    # 农副产品
+    "JD": "农副产品", "LH": "农副产品",
+    # 谷物
+    "C": "谷物", "A": "谷物", "B": "谷物", "CS": "谷物", "RR": "谷物",
+    # 股指期货 - 境内
+    "IC": "股", "IF": "股", "IM": "股", "IH": "股",
+    # 债券期货 - 境内
+    "T": "债", "TF": "债", "TL": "债", "TS": "债",
+    # 股指期货 - 港股
+    "HSIF": "股", "HHIF": "股", "HTIF": "股",
+    # 金融期货 - Eurex
+    "FDAX": "股", "FGBL": "债",
+    # 股指期货 - 境外
+    "ES": "股", "NQ": "股", "DM": "股", "NK": "股", "NO": "股",
+    # 债券期货 - 境外
+    "FV": "债", "TY": "债", "TU": "债", "US": "债", "JB": "债",
+}
+
 # ── 期货合约前缀 → 中文名称 ──────────────────────────────────────────────────
 FUTURES_NAME_MAP = {
     # ── 上期所 (.SHF) ──
@@ -127,3 +180,112 @@ def populate_names(df):
                 name = resolve_ticker_name(row.get("标的物"))
             if name:
                 df.at[i, "名称"] = name
+
+
+def _extract_prefix(ticker_str):
+    """从 Ticker 字符串提取合约前缀用于板块分类。"""
+    if pd.isna(ticker_str):
+        return None
+    ticker = str(ticker_str).strip()
+    if not ticker:
+        return None
+
+    # 1) ETF / 指数精确匹配 - 归类为金融期货
+    if ticker in ETF_NAME_MAP:
+        return None  # ETF 不分类
+
+    # 2) 境内期货: XX2606.SHF / XX605.CZC / XX2602.CFE / XX2604.INE
+    m = re.match(r'^([A-Za-z]+)\d+\.(SHF|DCE|CZC|INE|CFE)$', ticker)
+    if m:
+        return m.group(1).upper()
+
+    # 3) 港股期货: HHIF2602.HK
+    m = re.match(r'^([A-Za-z]+)\d+\.HK$', ticker)
+    if m:
+        return m.group(1).upper()
+
+    # 4) Eurex: FDAX2603, FGBL2603 (纯字母+数字, 无交易所后缀)
+    m = re.match(r'^([A-Za-z]{2,})\d{4}$', ticker)
+    if m:
+        return m.group(1).upper()
+
+    # 5) Bloomberg: ESH6 Index / GCJ6 Comdty (前缀 + 月份码 + 年份 + 类型)
+    m = re.match(r'^([A-Za-z]+?)([FGHJKMNQUVXZ])(\d{1,2})\s+(Index|Comdty)$', ticker)
+    if m and m.group(2) in _BBG_MONTH_CODES:
+        return m.group(1).upper()
+
+    return None
+
+
+def resolve_sector(ticker_str, underlying_str=None):
+    """根据 Wind Ticker 或 标的物 解析板块分类。
+
+    Args:
+        ticker_str: Wind Ticker
+        underlying_str: 标的物（备用）
+
+    Returns:
+        str: 板块名称（如 "贵金属"），未识别返回 "其他"
+    """
+    prefix = _extract_prefix(ticker_str)
+    if prefix and prefix in SECTOR_MAP:
+        return SECTOR_MAP[prefix]
+
+    # 尝试使用标的物
+    if underlying_str:
+        prefix = _extract_prefix(underlying_str)
+        if prefix and prefix in SECTOR_MAP:
+            return SECTOR_MAP[prefix]
+
+    return "其他"
+
+
+def resolve_region(ticker_str, underlying_str=None):
+    """根据 Wind Ticker 或 标的物 解析境内/境外。
+
+    Args:
+        ticker_str: Wind Ticker
+        underlying_str: 标的物（备用）
+
+    Returns:
+        str: "境内" 或 "境外"
+    """
+    def _check_region(ticker):
+        if pd.isna(ticker):
+            return None
+        ticker = str(ticker).strip()
+        if not ticker:
+            return None
+
+        # 境内期货: .SHF, .DCE, .CZC, .INE, .CFE
+        if re.search(r'\.(SHF|DCE|CZC|INE|CFE)$', ticker, re.IGNORECASE):
+            return "境内"
+
+        # 境外: .HK
+        if ticker.endswith('.HK'):
+            return "境外"
+
+        # 境外: Bloomberg 格式 (XXX Index / XXX Comdty)
+        if ' Index' in ticker or ' Comdty' in ticker:
+            return "境外"
+
+        # 境外: Eurex 格式 (FDAX2603, FGBL2603)
+        if re.match(r'^(FDAX|FGBL)\d{4}$', ticker):
+            return "境外"
+
+        # 境内 ETF: .SH, .SZ
+        if re.search(r'\.(SH|SZ)$', ticker, re.IGNORECASE):
+            return "境内"
+
+        return None
+
+    region = _check_region(ticker_str)
+    if region:
+        return region
+
+    if underlying_str:
+        region = _check_region(underlying_str)
+        if region:
+            return region
+
+    return "境内"  # 默认境内

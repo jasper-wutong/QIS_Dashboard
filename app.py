@@ -1,9 +1,8 @@
 """QIS SubBook Dashboard - Flask backend.
 
 Serves a single-page dashboard that displays QIS SubBook data from
-the latest EDSLib Excel file.  Single-ticker research is delegated
-to ``research_cli.py`` via subprocess (avoids Copilot SDK + Flask
-conflicts).
+the latest EDSLib Excel file.  Single-ticker research is powered by
+Alibaba Bailian RAG (阿里百炼知识库) for intelligent analysis.
 """
 
 import json
@@ -16,7 +15,13 @@ from pathlib import Path
 
 import pandas as pd
 from flask import Flask, jsonify, request, render_template
-from ticker_mapping import populate_names
+from ticker_mapping import populate_names, resolve_sector, resolve_region, SECTOR_ORDER, SECTOR_ICONS
+
+# 导入新闻聚合模块
+from news.news_fetcher import fetch_all_news, fetch_category_news
+
+# 导入百炼研究模块
+from ali_bailian.bailian_research import research_ticker, chat_ticker, research_batch as bailian_research_batch
 
 # -- Flask app -----------------------------------------------------------------
 app = Flask(__name__)
@@ -41,7 +46,7 @@ def to_records(frame: pd.DataFrame, columns: list) -> list:
 
 # -- Data loading & processing ------------------------------------------------
 
-DATA_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "VSCodePyScripts", "QIS_Dashboard")
+DATA_DIR = r"\\cicc.group\DFS\Pub\Workgrp\S_EQ Derivatives\3-部分共享\2-RB Formula\EDSLib_Realtime\EDSLib_Source\EDSLib_Realtime"
 FILE_PREFIX = "EDSLib Realtime Result as of"
 
 
@@ -118,6 +123,16 @@ def process_data(df_qis: pd.DataFrame, date_str: str) -> dict:
     df_other_raw = df_qis[~is_index].reset_index(drop=True)
     df_other = aggregate_by_wind_ticker(df_other_raw)
 
+    # 添加板块分类和境内/境外分类
+    df_other["_sector"] = df_other.apply(
+        lambda row: resolve_sector(row.get("Wind Ticker"), row.get("标的物")),
+        axis=1
+    )
+    df_other["_region"] = df_other.apply(
+        lambda row: resolve_region(row.get("Wind Ticker"), row.get("标的物")),
+        axis=1
+    )
+
     columns = list(df_qis.columns)
     subbooks = sorted(df_qis["SubBook"].unique().tolist())
 
@@ -127,11 +142,33 @@ def process_data(df_qis: pd.DataFrame, date_str: str) -> dict:
         if col not in df_other.columns:
             df_other[col] = None
 
+    # 按板块和境内/境外分组
+    sector_data = {}
+    sector_summaries = {}
+    for sector in SECTOR_ORDER:
+        df_sec = df_other[df_other["_sector"] == sector]
+        if not df_sec.empty:
+            # 分为境内和境外
+            df_domestic = df_sec[df_sec["_region"] == "境内"]
+            df_overseas = df_sec[df_sec["_region"] == "境外"]
+            
+            sector_data[sector] = {
+                "domestic": to_records(df_domestic, columns) if not df_domestic.empty else [],
+                "overseas": to_records(df_overseas, columns) if not df_overseas.empty else [],
+            }
+            
+            # 汇总也用聚合后的数据，保证和表格显示一致
+            sector_summaries[sector] = calc_summary(df_sec)
+
     return {
         "columns": columns,
         "subbooks": subbooks,
         "index_records": to_records(df_index, columns),
         "other_records": to_records(df_other, columns),
+        "sector_data": sector_data,
+        "sector_summaries": sector_summaries,
+        "sector_order": [s for s in SECTOR_ORDER if s in sector_data],
+        "sector_icons": SECTOR_ICONS,
         "index_summary": calc_summary(df_index),
         "other_summary": calc_summary(df_other_raw),
         "total_summary": calc_summary(df_qis),
@@ -155,6 +192,12 @@ CACHE_DATE = DATE_STR
 print(f"Data loaded: {DATE_STR}")
 print(f"  指数: {DATA['index_count']} rows")
 print(f"  其他标的物: {DATA['other_raw_count']} raw -> {DATA['other_merged_count']} merged")
+print(f"  板块分类: {len(DATA['sector_order'])} 个板块")
+for sec in DATA['sector_order']:
+    sec_data = DATA['sector_data'][sec]
+    domestic_cnt = len(sec_data.get('domestic', []))
+    overseas_cnt = len(sec_data.get('overseas', []))
+    print(f"    - {sec}: 境内 {domestic_cnt} / 境外 {overseas_cnt}")
 
 
 # -- Routes --------------------------------------------------------------------
@@ -175,6 +218,10 @@ def api_data():
         "subbooks": DATA["subbooks"],
         "index_data": DATA["index_records"],
         "other_data": DATA["other_records"],
+        "sector_data": DATA["sector_data"],
+        "sector_summaries": DATA["sector_summaries"],
+        "sector_order": DATA["sector_order"],
+        "sector_icons": DATA["sector_icons"],
         "index_summary": DATA["index_summary"],
         "other_summary": DATA["other_summary"],
         "total_summary": DATA["total_summary"],
@@ -194,14 +241,67 @@ def refresh():
     return jsonify({"status": "ok", "date_str": DATE_STR})
 
 
-# -- Single-ticker research via subprocess ------------------------------------
+# -- News routes ---------------------------------------------------------------
 
-RESEARCH_CLI = str(Path(__file__).resolve().parent / "research_cli.py")
+@app.route("/news")
+def news_page():
+    """新闻展示页面"""
+    return render_template(
+        "news.html",
+        date_str=DATE_STR,
+        now_time=datetime.now().strftime("%H:%M"),
+    )
+
+
+@app.route("/api/news")
+def api_news():
+    """获取所有新闻源的新闻（分类返回）"""
+    try:
+        news_data = fetch_all_news(max_workers=10, timeout=30)
+        return jsonify({
+            "ok": True,
+            "data": news_data
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "data": None
+        })
+
+
+@app.route("/api/news/<category>")
+def api_news_category(category):
+    """获取单个分类的新闻"""
+    try:
+        if category not in ["finance", "hot", "tech"]:
+            return jsonify({
+                "ok": False,
+                "error": f"未知分类: {category}，可选: finance, hot, tech",
+                "data": None
+            })
+        
+        news_data = fetch_category_news(category, max_workers=5, timeout=20)
+        return jsonify({
+            "ok": True,
+            "data": news_data
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "data": None
+        })
+
+
+# -- Single-ticker research via Bailian RAG -----------------------------------
+
+RESEARCH_CLI = str(Path(__file__).resolve().parent / "research_cli.py")  # 保留，作为备用
 
 
 @app.route("/api/research")
 def api_research():
-    """Delegate to research_cli.py for Copilot SDK research on one ticker."""
+    """调用百炼RAG知识库进行标的研究分析。"""
     name = request.args.get("name", "").strip()
     if not name:
         return jsonify({"ok": False, "error": "missing 'name' parameter", "content": ""}), 400
@@ -216,57 +316,42 @@ def api_research():
     change = request.args.get("change", "NA").strip() or "NA"
     exposure = request.args.get("exposure", "NA").strip() or "NA"
 
-    cmd = [
-        sys.executable, RESEARCH_CLI, name,
-        "--price", price, "--change", change, "--exposure", exposure,
-    ]
+    print(f"[RESEARCH] 调用百炼分析: {name} (price={price}, change={change}, exposure={exposure})")
+
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=180,
-            cwd=str(Path(__file__).resolve().parent),
+        result = research_ticker(
+            name=name,
+            price=price,
+            change=change,
+            exposure=exposure,
         )
-        if proc.returncode != 0:
-            return jsonify({
-                "ok": False, "name": name,
-                "error": f"research_cli exited {proc.returncode}: {proc.stderr[:500]}",
-                "content": "",
-            })
+        
+        # Cache successful results
+        if result.get("ok") and result.get("content"):
+            RESEARCH_CACHE[name] = result
+            print(f"[RESEARCH] 分析完成: {name}")
+        else:
+            print(f"[RESEARCH] 分析失败: {name} - {result.get('error', 'unknown')}")
+        
+        return jsonify(result)
 
-        # Last stdout line should be JSON
-        lines = proc.stdout.strip().split("\n")
-        for line in reversed(lines):
-            try:
-                result = json.loads(line.strip())
-                # Cache successful results
-                if result.get("ok") and result.get("content"):
-                    RESEARCH_CACHE[name] = result
-                return jsonify(result)
-            except json.JSONDecodeError:
-                continue
-        return jsonify({
-            "ok": False, "name": name,
-            "error": "Failed to parse CLI output",
-            "content": proc.stdout[:1000],
-        })
-
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "name": name, "error": "Research timed out (180s)", "content": ""})
     except Exception as exc:
+        print(f"[RESEARCH] 异常: {exc}")
         return jsonify({"ok": False, "name": name, "error": str(exc), "content": ""})
 
 
-# -- Batch research via subprocess --------------------------------------------
+# -- Batch research via Bailian RAG -------------------------------------------
 
 @app.route("/api/research/batch", methods=["POST"])
 def api_research_batch():
-    """Batch research for multiple tickers in one Copilot SDK call."""
+    """批量研究多个标的（使用百炼RAG）。"""
     body = request.get_json(silent=True) or {}
     tickers = body.get("tickers", [])
     if not tickers:
         return jsonify({"ok": False, "error": "missing 'tickers' array", "results": []}), 400
 
     names = [t.get("name", "?") for t in tickers]
-    print(f"[BATCH] Received {len(tickers)} tickers: {', '.join(names)}")
+    print(f"[BATCH] 收到 {len(tickers)} 个标的: {', '.join(names)}")
 
     # Separate cached vs uncached
     cached_results = []
@@ -283,80 +368,81 @@ def api_research_batch():
             uncached_tickers.append(t)
 
     if cached_results:
-        print(f"[BATCH]   {len(cached_results)} cached, {len(uncached_tickers)} to analyze")
+        print(f"[BATCH]   {len(cached_results)} 已缓存, {len(uncached_tickers)} 待分析")
 
     # If all cached, return immediately
     if not uncached_tickers:
-        print("[BATCH]   All cached, returning immediately")
+        print("[BATCH]   全部命中缓存")
         return jsonify({"ok": True, "results": cached_results, "all_cached": True})
 
-    # Call research_cli.py in batch mode
-    batch_json = json.dumps(uncached_tickers, ensure_ascii=False)
-    cmd = [sys.executable, RESEARCH_CLI, "--batch-json", batch_json]
+    # 使用百炼批量研究
     uncached_names = [t.get("name", "?") for t in uncached_tickers]
-    print(f"[BATCH]   Calling research_cli.py for: {', '.join(uncached_names)}")
+    print(f"[BATCH]   调用百炼分析: {', '.join(uncached_names)}")
+    
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=300,
-            cwd=str(Path(__file__).resolve().parent),
-        )
-
-        # Log stderr (contains progress info from research_cli.py)
-        if proc.stderr:
-            for line in proc.stderr.strip().split("\n"):
-                if line.strip():
-                    print(f"[BATCH/CLI] {line.strip()}")
-
-        if proc.returncode != 0:
-            print(f"[BATCH]   ERROR: research_cli exited {proc.returncode}")
-            return jsonify({
-                "ok": False,
-                "error": f"research_cli exited {proc.returncode}: {proc.stderr[:500]}",
-                "results": cached_results,
-            })
-
-        # Parse JSON from last stdout line
-        lines = proc.stdout.strip().split("\n")
-        batch_result = None
-        for line in reversed(lines):
-            try:
-                batch_result = json.loads(line.strip())
-                break
-            except json.JSONDecodeError:
-                continue
-
-        if not batch_result:
-            print("[BATCH]   ERROR: Failed to parse CLI output")
-            return jsonify({
-                "ok": False,
-                "error": "Failed to parse batch CLI output",
-                "results": cached_results,
-            })
-
+        new_results = bailian_research_batch(uncached_tickers)
+        
         # Cache successful individual results
-        new_results = batch_result.get("results", [])
         ok_count = 0
         for r in new_results:
             if r.get("ok") and r.get("content"):
                 RESEARCH_CACHE[r["name"]] = r
                 ok_count += 1
-        print(f"[BATCH]   Done: {ok_count}/{len(new_results)} succeeded, model={batch_result.get('model','?')}")
+        print(f"[BATCH]   完成: {ok_count}/{len(new_results)} 成功, model=bailian-rag")
 
         return jsonify({
             "ok": True,
-            "model": batch_result.get("model", ""),
+            "model": "bailian-rag",
             "results": cached_results + new_results,
         })
 
-    except subprocess.TimeoutExpired:
-        print("[BATCH]   ERROR: Timed out (300s)")
-        return jsonify({"ok": False, "error": "Batch research timed out (300s)", "results": cached_results})
     except Exception as exc:
-        print(f"[BATCH]   ERROR: {exc}")
+        print(f"[BATCH]   错误: {exc}")
         return jsonify({"ok": False, "error": str(exc), "results": cached_results})
+
+
+# -- Chat with research context via Bailian RAG -------------------------------
+
+@app.route("/api/research/chat", methods=["POST"])
+def api_research_chat():
+    """与百炼进行多轮对话，讨论特定标的。"""
+    body = request.get_json(silent=True) or {}
+    name = body.get("name", "").strip()
+    message = body.get("message", "").strip()
+    history = body.get("history", [])
+    
+    if not name or not message:
+        return jsonify({"ok": False, "error": "missing 'name' or 'message'", "content": ""}), 400
+    
+    price = body.get("price", "NA")
+    change = body.get("change", "NA")
+    exposure = body.get("exposure", "NA")
+    
+    print(f"[CHAT] 百炼对话: {name} - {message[:50]}...")
+    
+    try:
+        result = chat_ticker(
+            name=name,
+            message=message,
+            history=history,
+            price=str(price),
+            change=str(change),
+            exposure=str(exposure),
+        )
+        
+        if result.get("ok"):
+            print(f"[CHAT] 对话完成: {name}")
+        else:
+            print(f"[CHAT] 对话失败: {name} - {result.get('error', 'unknown')}")
+        
+        return jsonify(result)
+
+    except Exception as exc:
+        print(f"[CHAT] 异常: {exc}")
+        return jsonify({"ok": False, "name": name, "error": str(exc), "content": ""})
 
 
 # -- Entrypoint ----------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=5050)
+    app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5050)

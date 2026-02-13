@@ -94,6 +94,64 @@
   }
   .badge-index { background: rgba(56,189,248,0.15); color: var(--accent); }
   .badge-other { background: rgba(129,140,248,0.15); color: var(--accent2); }
+  .badge-sector { background: rgba(251,191,36,0.15); color: var(--yellow); }
+
+  /* ── Sector Sections ─────────────────────── */
+  .sector-section { margin-bottom: 20px; }
+  .sector-section .section-title h2 { font-size: 16px; }
+  .sector-summary { margin-bottom: 12px; }
+  .sector-summary .s-card { padding: 10px 12px; }
+  .sector-summary .s-card .s-value { font-size: 15px; }
+
+  /* ── Region Split Layout ─────────────────── */
+  .region-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .region-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 100px;
+  }
+  .region-panel.domestic { border-left: 3px solid var(--green); }
+  .region-panel.overseas { border-left: 3px solid var(--accent); }
+  .region-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .region-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .region-header h4.domestic { color: var(--green); }
+  .region-header h4.overseas { color: var(--accent); }
+  .region-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .region-badge.domestic { background: rgba(52,211,153,0.15); color: var(--green); }
+  .region-badge.overseas { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .region-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 20px;
+  }
+  .region-table { margin-top: 8px; }
+  .region-table table { font-size: 12px; }
+  @media (max-width: 1200px) {
+    .region-container { grid-template-columns: 1fr; }
+  }
 
   /* ── Summary Grid ────────────────────────── */
   .summary-grid {
@@ -333,6 +391,85 @@
   .research-btn:hover { opacity: 0.85; }
   .research-btn:disabled { opacity: 0.5; cursor: wait; }
 
+  /* ── Research Chat Footer ──────────── */
+  .research-chat-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .research-chat-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .research-chat-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .research-chat-input:focus {
+    border-color: var(--accent);
+  }
+  .research-chat-input::placeholder {
+    color: var(--text-muted);
+  }
+  .research-chat-send {
+    padding: 12px 20px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .research-chat-send:hover { opacity: 0.85; }
+  .research-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .research-chat-input:disabled {
+    background: var(--bg);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .research-chat-footer.disabled .research-chat-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+  .chat-message {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 100%;
+    word-wrap: break-word;
+  }
+  .chat-message.user {
+    background: rgba(56,189,248,0.08);
+    border-left: 2px solid var(--accent);
+    margin-left: 20px;
+  }
+  .chat-message.assistant {
+    background: rgba(129,140,248,0.08);
+    border-left: 2px solid var(--accent2);
+  }
+  .chat-message .chat-role {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .chat-message p { margin: 4px 0; }
+  .chat-message h4 { margin: 8px 0 4px; font-size: 13px; }
+
   /* ── Batch Research Progress ──────────── */
   .batch-progress {
     padding: 20px 24px;
@@ -427,6 +564,7 @@
 <div class="header">
   <h1>📊 QIS SubBook Dashboard</h1>
   <div class="header-right">
+    <button class="refresh-btn" onclick="window.location.href='/news'">📰 新闻</button>
     <button class="refresh-btn" onclick="refreshData()">🔄 刷新数据</button>
     <div class="date-badge">Data: <strong id="dateLabel">{{ date_str }}</strong> &nbsp;|&nbsp; {{ now_time }}</div>
   </div>
@@ -438,7 +576,7 @@
   <div id="dashboardContent" style="display:none;">
     <!-- ── 总汇总 Banner ───────────────────── -->
     <div class="agg-banner">
-      <div class="agg-title">📋 总汇总 &mdash; 指数 + 其他标的物</div>
+      <div class="agg-title">📋 总汇总 &mdash; 指数 + 商品期货</div>
       <div class="agg-grid" id="aggGrid"></div>
     </div>
 
@@ -463,25 +601,14 @@
       </div>
     </div>
 
-    <!-- ── 其他标的物 Section ──────────────── -->
-    <div class="section-group" id="otherSection">
-      <div class="section-title">
-        <h2>📊 其他标的物（按 Wind Ticker 合并）</h2>
-        <span class="badge badge-other" id="otherBadge"></span>
-      </div>
-      <div class="summary-grid" id="otherSummary"></div>
-      <div class="toolbar">
-        <div class="search-box">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          <input type="text" id="otherSearch" placeholder="搜索标的物...">
-        </div>
-        <span class="row-count" id="otherRowCount"></span>
-        <button class="research-all-btn" id="researchAllBtn" onclick="doResearchAll()">🔬 一键研究全部</button>
-        <button class="btn" onclick="exportCSV('other')">⬇ CSV</button>
-      </div>
-      <div class="table-wrap">
-        <table><thead><tr id="otherHeader"></tr></thead><tbody id="otherBody"></tbody></table>
-      </div>
+    <!-- ── 商品期货板块 Sections (动态生成) ──────────────── -->
+    <div id="sectorContainer">
+      <!-- 板块 sections 将由 JavaScript 动态渲染 -->
+    </div>
+    
+    <!-- ── 一键研究全部按钮 ──────────────── -->
+    <div class="section-group" style="padding: 20px;">
+      <button class="research-all-btn" id="researchAllBtn" onclick="doResearchAll()">🔬 一键研究全部商品标的</button>
     </div>
   </div>
 </div>
@@ -496,6 +623,13 @@
   <div class="research-panel-body" id="researchPanelBody">
     <div class="loading-spinner">点击表格中的「研究」按钮加载分析...</div>
   </div>
+  <div class="research-chat-footer disabled" id="researchChatFooter">
+    <form class="research-chat-form" onsubmit="sendChatMessage(event)">
+      <input type="text" class="research-chat-input" id="researchChatInput" 
+             placeholder="请等待研究报告加载完成..." autocomplete="off" disabled>
+      <button type="submit" class="research-chat-send" id="researchChatSend" disabled>发送</button>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -503,15 +637,19 @@
 let COLUMNS, INDEX_DATA, OTHER_DATA, SUBBOOKS;
 let INDEX_SUMMARY, OTHER_SUMMARY, TOTAL_SUMMARY;
 let INDEX_SB, OTHER_SB;
+let SECTOR_DATA, SECTOR_SUMMARIES, SECTOR_ORDER, SECTOR_ICONS;
 let colIdx, idxShowI, othShowI, sbI;
 let researchCache = {};  // {name: {ok, name, model, content}}
 let batchRunning = false;
+let sectorStates = {};  // {sectorName: {filtered: [], sortCol: -1, sortDir: 0}}
+let currentResearch = null;  // {name, price, change, exposure} for chat context
+let chatHistory = [];  // [{role: 'user'|'assistant', content: string}]
 
 const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","Vega($)","Theta","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","SubBook","BookID"];
-const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","风险敞口","__research__"];
+const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","%Gamma($)","Vega($)","Theta","风险敞口","__estimated_pnl__","__research__"];
 
 const numCols = new Set(["现价","涨跌幅","Delta($)","SOD Delta($)","PDE Delta($)","%Gamma($)","PDE Gamma(%)","Vega($)","FX Vega($)","Theta","现货市值","期货市值","风险敞口","T+1 风险敞口","风险敞口(PDE)","当日损益","当日损益(PDE)","当日损益(合约端)","当日损益(对冲端)","存续名义本金","Delta Shares","Open Shares","Need To Trade","Exposure pnl","Gamma pnl","Theta pnl","Vega pnl","Borrow pnl","Residual"]);
-const colorCols = new Set(["涨跌幅","当日损益","当日损益(合约端)","当日损益(对冲端)","Delta($)","Theta","Vega($)"]);
+const colorCols = new Set(["涨跌幅","当日损益","当日损益(合约端)","当日损益(对冲端)","Delta($)","Theta","Vega($)","%Gamma($)"]);
 
 const state = {
   index: { book: "ALL", sortCol: -1, sortDir: 0, filtered: [] },
@@ -553,17 +691,41 @@ async function loadData() {
   TOTAL_SUMMARY = d.total_summary;
   INDEX_SB = d.index_sb;
   OTHER_SB = d.other_sb;
+  SECTOR_DATA = d.sector_data || {};
+  SECTOR_SUMMARIES = d.sector_summaries || {};
+  SECTOR_ORDER = d.sector_order || [];
+  SECTOR_ICONS = d.sector_icons || {};
 
   colIdx = {};
   COLUMNS.forEach((c,i) => colIdx[c] = i);
   idxShowI = SHOW_COLS_INDEX.map(c => colIdx[c]).filter(i => i !== undefined);
-  othShowI = SHOW_COLS_OTHER.map(c => c === '__research__' ? -999 : colIdx[c]).filter(i => i !== undefined || i === -999);
+  othShowI = SHOW_COLS_OTHER.map(c => c === '__research__' ? -999 : c === '__estimated_pnl__' ? -998 : colIdx[c]).filter(i => i !== undefined || i === -999 || i === -998);
   sbI = colIdx["SubBook"];
 
   state.index.filtered = [...INDEX_DATA];
   state.index.book = "ALL"; state.index.sortCol = -1; state.index.sortDir = 0;
   state.other.filtered = [...OTHER_DATA];
   state.other.book = "ALL"; state.other.sortCol = -1; state.other.sortDir = 0;
+
+  // Initialize sector states (now with domestic/overseas)
+  sectorStates = {};
+  SECTOR_ORDER.forEach(sec => {
+    const secData = SECTOR_DATA[sec] || {};
+    sectorStates[sec] = {
+      domestic: {
+        data: secData.domestic || [],
+        filtered: [...(secData.domestic || [])],
+        sortCol: -1,
+        sortDir: 0
+      },
+      overseas: {
+        data: secData.overseas || [],
+        filtered: [...(secData.overseas || [])],
+        sortCol: -1,
+        sortDir: 0
+      }
+    };
+  });
 
   document.getElementById("dateLabel").textContent = d.date_str;
   document.getElementById("loadingMsg").style.display = "none";
@@ -575,14 +737,13 @@ async function loadData() {
 function renderAll() {
   renderAgg();
   renderSummaryCards("indexSummary", INDEX_SUMMARY, "index");
-  renderSummaryCards("otherSummary", OTHER_SUMMARY, "other");
   document.getElementById("indexBadge").textContent = INDEX_SUMMARY.count + " 行";
-  document.getElementById("otherBadge").textContent = OTHER_DATA.length + " 个标的";
   renderTabs("index");
   renderHeader("index");
-  renderHeader("other");
   applyFilter("index");
-  applyFilter("other");
+  
+  // Render sector sections dynamically
+  renderSectorSections();
 }
 
 // ── Refresh ───────────────────────────────────
@@ -598,17 +759,17 @@ async function refreshData() {
 // ── Aggregate Banner ──────────────────────────
 function renderAgg() {
   const items = [
-    {label:"持仓总数", val:TOTAL_SUMMARY.count, sub:`指数 ${INDEX_SUMMARY.count} / 其他 ${OTHER_SUMMARY.count}`},
-    {label:"汇总 Delta($)", val:TOTAL_SUMMARY.delta, sub:`指 ${fmtBig(INDEX_SUMMARY.delta)} / 其 ${fmtBig(OTHER_SUMMARY.delta)}`},
-    {label:"汇总 SOD Delta($)", val:TOTAL_SUMMARY.sod_delta, sub:`指 ${fmtBig(INDEX_SUMMARY.sod_delta)} / 其 ${fmtBig(OTHER_SUMMARY.sod_delta)}`},
-    {label:"汇总 Theta($)", val:TOTAL_SUMMARY.theta, sub:`指 ${fmtBig(INDEX_SUMMARY.theta)} / 其 ${fmtBig(OTHER_SUMMARY.theta)}`},
-    {label:"汇总 Vega($)", val:TOTAL_SUMMARY.vega, sub:`指 ${fmtBig(INDEX_SUMMARY.vega)} / 其 ${fmtBig(OTHER_SUMMARY.vega)}`},
-    {label:"汇总 %Gamma($)", val:TOTAL_SUMMARY.gamma, sub:`指 ${fmtBig(INDEX_SUMMARY.gamma)} / 其 ${fmtBig(OTHER_SUMMARY.gamma)}`},
-    {label:"汇总 当日损益", val:TOTAL_SUMMARY.pnl, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl)} / 其 ${fmtBig(OTHER_SUMMARY.pnl)}`},
-    {label:"汇总 风险敞口", val:TOTAL_SUMMARY.exposure, sub:`指 ${fmtBig(INDEX_SUMMARY.exposure)} / 其 ${fmtBig(OTHER_SUMMARY.exposure)}`},
-    {label:"汇总 存续名义本金", val:TOTAL_SUMMARY.notional, sub:`指 ${fmtBig(INDEX_SUMMARY.notional)} / 其 ${fmtBig(OTHER_SUMMARY.notional)}`},
-    {label:"损益(合约端)", val:TOTAL_SUMMARY.pnl_contract, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_contract)} / 其 ${fmtBig(OTHER_SUMMARY.pnl_contract)}`},
-    {label:"损益(对冲端)", val:TOTAL_SUMMARY.pnl_hedge, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_hedge)} / 其 ${fmtBig(OTHER_SUMMARY.pnl_hedge)}`},
+    {label:"持仓总数", val:TOTAL_SUMMARY.count, sub:`指数 ${INDEX_SUMMARY.count} / 商品 ${OTHER_SUMMARY.count}`},
+    {label:"汇总 Delta($)", val:TOTAL_SUMMARY.delta, sub:`指 ${fmtBig(INDEX_SUMMARY.delta)} / 商 ${fmtBig(OTHER_SUMMARY.delta)}`},
+    {label:"汇总 SOD Delta($)", val:TOTAL_SUMMARY.sod_delta, sub:`指 ${fmtBig(INDEX_SUMMARY.sod_delta)} / 商 ${fmtBig(OTHER_SUMMARY.sod_delta)}`},
+    {label:"汇总 Theta($)", val:TOTAL_SUMMARY.theta, sub:`指 ${fmtBig(INDEX_SUMMARY.theta)} / 商 ${fmtBig(OTHER_SUMMARY.theta)}`},
+    {label:"汇总 Vega($)", val:TOTAL_SUMMARY.vega, sub:`指 ${fmtBig(INDEX_SUMMARY.vega)} / 商 ${fmtBig(OTHER_SUMMARY.vega)}`},
+    {label:"汇总 %Gamma($)", val:TOTAL_SUMMARY.gamma, sub:`指 ${fmtBig(INDEX_SUMMARY.gamma)} / 商 ${fmtBig(OTHER_SUMMARY.gamma)}`},
+    {label:"汇总 当日损益", val:TOTAL_SUMMARY.pnl, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl)} / 商 ${fmtBig(OTHER_SUMMARY.pnl)}`},
+    {label:"汇总 风险敞口", val:TOTAL_SUMMARY.exposure, sub:`指 ${fmtBig(INDEX_SUMMARY.exposure)} / 商 ${fmtBig(OTHER_SUMMARY.exposure)}`},
+    {label:"汇总 存续名义本金", val:TOTAL_SUMMARY.notional, sub:`指 ${fmtBig(INDEX_SUMMARY.notional)} / 商 ${fmtBig(OTHER_SUMMARY.notional)}`},
+    {label:"损益(合约端)", val:TOTAL_SUMMARY.pnl_contract, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_contract)} / 商 ${fmtBig(OTHER_SUMMARY.pnl_contract)}`},
+    {label:"损益(对冲端)", val:TOTAL_SUMMARY.pnl_hedge, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl_hedge)} / 商 ${fmtBig(OTHER_SUMMARY.pnl_hedge)}`},
   ];
   document.getElementById("aggGrid").innerHTML = items.map(it => `
     <div class="agg-item">
@@ -662,6 +823,242 @@ function setBook(kind, b) {
   renderTabs(kind);
   renderSummaryCards(kind + "Summary", getSummary(kind, b), kind);
   applyFilter(kind);
+}
+
+// ── Sector Sections (Dynamic) ─────────────────
+function renderSectorSections() {
+  const container = document.getElementById('sectorContainer');
+  if (!container) return;
+  
+  let html = '';
+  SECTOR_ORDER.forEach(sector => {
+    const secData = SECTOR_DATA[sector];
+    if (!secData) return;
+    
+    const domesticData = secData.domestic || [];
+    const overseasData = secData.overseas || [];
+    const totalCount = domesticData.length + overseasData.length;
+    if (totalCount === 0) return;
+    
+    const summary = SECTOR_SUMMARIES[sector] || {};
+    const icon = SECTOR_ICONS[sector] || '📦';
+    const secId = 'sector_' + sector.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+    
+    html += `
+    <div class="section-group sector-section" id="${secId}Section">
+      <div class="section-title">
+        <h2>${icon} ${sector}</h2>
+        <span class="badge badge-sector" id="${secId}Badge">${totalCount} 个标的</span>
+      </div>
+      <div class="summary-grid sector-summary" id="${secId}Summary"></div>
+      <div class="region-container">
+        <!-- 境内 -->
+        <div class="region-panel domestic">
+          <div class="region-header">
+            <h4 class="domestic">🇨🇳 境内</h4>
+            <span class="region-badge domestic" id="${secId}DomesticBadge">${domesticData.length} 个</span>
+          </div>
+          <div class="region-table table-wrap">
+            <table><thead><tr id="${secId}DomesticHeader"></tr></thead><tbody id="${secId}DomesticBody"></tbody></table>
+          </div>
+        </div>
+        <!-- 境外 -->
+        <div class="region-panel overseas">
+          <div class="region-header">
+            <h4 class="overseas">🌍 境外</h4>
+            <span class="region-badge overseas" id="${secId}OverseasBadge">${overseasData.length} 个</span>
+          </div>
+          <div class="region-table table-wrap">
+            <table><thead><tr id="${secId}OverseasHeader"></tr></thead><tbody id="${secId}OverseasBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  });
+  
+  container.innerHTML = html;
+  
+  // Render each sector's content
+  SECTOR_ORDER.forEach(sector => {
+    const secData = SECTOR_DATA[sector];
+    if (!secData) return;
+    const domesticData = secData.domestic || [];
+    const overseasData = secData.overseas || [];
+    if (domesticData.length === 0 && overseasData.length === 0) return;
+    
+    renderSectorSummary(sector);
+    renderRegionHeader(sector, 'domestic');
+    renderRegionHeader(sector, 'overseas');
+    renderRegionTable(sector, 'domestic');
+    renderRegionTable(sector, 'overseas');
+  });
+}
+
+function getSectorId(sector) {
+  return 'sector_' + sector.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+}
+
+function calcSectorEstimatedPnl(sector) {
+  const s = sectorStates[sector];
+  if (!s) return 0;
+  let total = 0;
+  ['domestic', 'overseas'].forEach(region => {
+    if (s[region] && s[region].data) {
+      s[region].data.forEach(row => {
+        const exposure = row[colIdx['风险敞口']];
+        const change = row[colIdx['涨跌幅']];
+        if (typeof exposure === 'number' && typeof change === 'number') {
+          total += exposure * change;
+        }
+      });
+    }
+  });
+  return total;
+}
+
+function renderSectorSummary(sector) {
+  const summary = SECTOR_SUMMARIES[sector] || {};
+  const secId = getSectorId(sector);
+  const el = document.getElementById(secId + 'Summary');
+  if (!el) return;
+  
+  const estimatedPnl = calcSectorEstimatedPnl(sector);
+  
+  const keys = [
+    ["Delta($)", "delta"], ["%Gamma($)", "gamma"], ["Theta($)", "theta"], ["Vega($)", "vega"],
+    ["当日损益", "pnl"], ["风险敞口", "exposure"],
+  ];
+  el.innerHTML = keys.map(([lbl, key]) => `
+    <div class="s-card">
+      <div class="s-label">${lbl}</div>
+      <div class="s-value ${valCls(summary[key] || 0)}">${fmtBig(summary[key] || 0)}</div>
+    </div>
+  `).join("") + `
+    <div class="s-card">
+      <div class="s-label">预估PnL</div>
+      <div class="s-value ${valCls(estimatedPnl)}">${fmtBig(estimatedPnl)}</div>
+    </div>
+  `;
+}
+
+function renderRegionHeader(sector, region) {
+  const secId = getSectorId(sector);
+  const regionCap = region.charAt(0).toUpperCase() + region.slice(1);
+  const tr = document.getElementById(secId + regionCap + 'Header');
+  if (!tr) return;
+  
+  const s = sectorStates[sector] && sectorStates[sector][region];
+  if (!s) return;
+  
+  tr.innerHTML = othShowI.map((ci, si) => {
+    if (ci === -999) return `<th>研究</th>`;
+    if (ci === -998) {
+      let cls = s.sortCol === si ? (s.sortDir === 1 ? "sort-asc" : "sort-desc") : "";
+      return `<th class="${cls}" onclick="doRegionSort('${sector}','${region}',${si})">预估PnL</th>`;
+    }
+    let cls = s.sortCol === si ? (s.sortDir === 1 ? "sort-asc" : "sort-desc") : "";
+    return `<th class="${cls}" onclick="doRegionSort('${sector}','${region}',${si})">${COLUMNS[ci]}</th>`;
+  }).join("");
+}
+
+function doRegionSort(sector, region, si) {
+  const s = sectorStates[sector] && sectorStates[sector][region];
+  if (!s) return;
+  if (s.sortCol === si) s.sortDir = s.sortDir === 1 ? -1 : s.sortDir === -1 ? 0 : 1;
+  else { s.sortCol = si; s.sortDir = 1; }
+  renderRegionHeader(sector, region);
+  renderRegionTable(sector, region);
+}
+
+function renderRegionTable(sector, region) {
+  const secId = getSectorId(sector);
+  const regionCap = region.charAt(0).toUpperCase() + region.slice(1);
+  const s = sectorStates[sector] && sectorStates[sector][region];
+  if (!s) return;
+  
+  const tbody = document.getElementById(secId + regionCap + 'Body');
+  if (!tbody) return;
+  
+  // Apply sort if needed
+  let data = [...s.data];
+  if (s.sortDir !== 0 && s.sortCol >= 0) {
+    const ci = othShowI[s.sortCol];
+    data.sort((a,b) => {
+      let va, vb;
+      if (ci === -998) {
+        // Sort by estimated PnL
+        const expA = a[colIdx['风险敞口']], chgA = a[colIdx['涨跌幅']];
+        const expB = b[colIdx['风险敞口']], chgB = b[colIdx['涨跌幅']];
+        va = (typeof expA === 'number' && typeof chgA === 'number') ? expA * chgA : null;
+        vb = (typeof expB === 'number' && typeof chgB === 'number') ? expB * chgB : null;
+      } else {
+        va = a[ci];
+        vb = b[ci];
+      }
+      if (va===null) return 1; if (vb===null) return -1;
+      if (typeof va==="number" && typeof vb==="number") return (va-vb)*s.sortDir;
+      return String(va).localeCompare(String(vb))*s.sortDir;
+    });
+  }
+  s.filtered = data;
+
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${othShowI.length}" class="region-empty">暂无${region === 'domestic' ? '境内' : '境外'}标的</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(row => {
+    const exposure = row[colIdx['风险敞口']];
+    const change = row[colIdx['涨跌幅']];
+    // Calculate estimated PnL: exposure × change
+    const estimatedPnl = (typeof exposure === 'number' && typeof change === 'number') ? exposure * change : null;
+    row._estimatedPnl = estimatedPnl;  // Store for sorting
+    
+    return "<tr>" + othShowI.map(ci => {
+      if (ci === -998) {
+        // Estimated PnL column
+        if (estimatedPnl === null) return `<td class="num">-</td>`;
+        const cls = estimatedPnl > 0 ? "num pos" : estimatedPnl < 0 ? "num neg" : "num";
+        return `<td class="${cls}">${fmtBig(estimatedPnl)}</td>`;
+      }
+      if (ci === -999) {
+        const tickerName = row[colIdx['名称']] || row[colIdx['标的物']] || '';
+        const price = row[colIdx['现价']];
+        const pStr = price !== null && price !== undefined ? String(price) : 'NA';
+        const cStr = change !== null && change !== undefined ? String(change) : 'NA';
+        const eStr = exposure !== null && exposure !== undefined ? String(exposure) : 'NA';
+        const escaped = tickerName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `<td><button class="research-btn" onclick="doResearch('${escaped}','${pStr}','${cStr}','${eStr}')">🔍 研究</button></td>`;
+      }
+      const col = COLUMNS[ci], v = row[ci];
+      if (col === "SubBook") return `<td><span class="sb-badge sb-${v}">${v}</span></td>`;
+      const isNum = numCols.has(col) && typeof v === "number";
+      let cls = isNum ? "num" : "";
+      if (isNum && colorCols.has(col)) { if (v > 0) cls += " pos"; else if (v < 0) cls += " neg"; }
+      const display = (col === "涨跌幅" && typeof v === "number") ? fmtPct(v) : fmt(v);
+      return `<td class="${cls}">${display}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+}
+
+function exportSectorCSV(sector) {
+  const s = sectorStates[sector];
+  if (!s) return;
+  
+  // Combine domestic and overseas data
+  const data = [...(s.domestic.filtered || []), ...(s.overseas.filtered || [])];
+  const hdr = othShowI.filter(ci => ci !== -999).map(ci => COLUMNS[ci]).join(",");
+  const rows = data.map(r => othShowI.filter(ci => ci !== -999).map(ci => {
+    const v = r[ci]; if (v===null) return "";
+    if (typeof v==="string" && v.includes(",")) return `"${v}"`;
+    return v;
+  }).join(","));
+  const csv = "\uFEFF" + hdr + "\n" + rows.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `QIS_${sector}_${document.getElementById("dateLabel").textContent}.csv`;
+  a.click();
 }
 
 // ── Table Headers ─────────────────────────────
@@ -762,12 +1159,134 @@ function exportCSV(kind) {
 
 // ── Event Listeners ───────────────────────────
 document.getElementById("indexSearch").addEventListener("input", () => applyFilter("index"));
-document.getElementById("otherSearch").addEventListener("input", () => applyFilter("other"));
 
 // ── Research Panel ─────────────────────────────
 function closeResearchPanel() {
   document.getElementById('researchOverlay').classList.remove('show');
   document.getElementById('researchPanel').classList.remove('show');
+  // Clear chat history when panel is closed
+  chatHistory = [];
+  currentResearch = null;
+  // Reset chat input to disabled state
+  _setChatEnabled(false);
+}
+
+function _setChatEnabled(enabled) {
+  const footer = document.getElementById('researchChatFooter');
+  const input = document.getElementById('researchChatInput');
+  const sendBtn = document.getElementById('researchChatSend');
+  if (enabled) {
+    footer.classList.remove('disabled');
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.placeholder = '输入问题，继续对话...';
+  } else {
+    footer.classList.add('disabled');
+    input.disabled = true;
+    sendBtn.disabled = true;
+    input.placeholder = '请等待研究报告加载完成...';
+    input.value = '';
+  }
+}
+
+// ── Chat Message Handler ──────────────────────
+async function sendChatMessage(event) {
+  event.preventDefault();
+  
+  const input = document.getElementById('researchChatInput');
+  const sendBtn = document.getElementById('researchChatSend');
+  const body = document.getElementById('researchPanelBody');
+  const message = input.value.trim();
+  
+  if (!message || !currentResearch) return;
+  
+  // Disable input while sending
+  input.disabled = true;
+  sendBtn.disabled = true;
+  sendBtn.textContent = '发送中...';
+  
+  // Add user message to display
+  const userMsgHtml = `
+    <div class="chat-message user">
+      <div class="chat-role">💬 你的问题</div>
+      <div>${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+    </div>
+  `;
+  body.insertAdjacentHTML('beforeend', userMsgHtml);
+  
+  // Add loading indicator
+  const loadingId = 'chat-loading-' + Date.now();
+  body.insertAdjacentHTML('beforeend', `
+    <div id="${loadingId}" class="chat-message assistant">
+      <div class="chat-role">🤖 百炼助手</div>
+      <div style="color:var(--text-muted)">⏳ 正在思考...</div>
+    </div>
+  `);
+  body.scrollTop = body.scrollHeight;
+  
+  // Clear input
+  input.value = '';
+  
+  try {
+    const resp = await fetch('/api/research/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: currentResearch.name,
+        price: currentResearch.price,
+        change: currentResearch.change,
+        exposure: currentResearch.exposure,
+        message: message,
+        history: chatHistory
+      })
+    });
+    const data = await resp.json();
+    
+    // Remove loading indicator
+    document.getElementById(loadingId)?.remove();
+    
+    if (data.ok && data.content) {
+      // Add to chat history
+      chatHistory.push({ role: 'user', content: message });
+      chatHistory.push({ role: 'assistant', content: data.content });
+      
+      // Format and display response
+      let text = data.content
+        .replace(/### (.+)/g, '<h4 style="color:var(--accent);margin:12px 0 6px;">$1</h4>')
+        .replace(/## (.+)/g, '<h4 style="color:var(--accent);margin:12px 0 6px;">$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--accent2)">$1</strong>')
+        .replace(/\n\n/g, '</p><p style="margin:6px 0">')
+        .replace(/\n/g, '<br>');
+      
+      body.insertAdjacentHTML('beforeend', `
+        <div class="chat-message assistant">
+          <div class="chat-role">🤖 百炼助手</div>
+          <div><p style="margin:6px 0">${text}</p></div>
+        </div>
+      `);
+    } else {
+      body.insertAdjacentHTML('beforeend', `
+        <div class="chat-message assistant">
+          <div class="chat-role">🤖 百炼助手</div>
+          <div style="color:var(--red)">❌ ${data.error || '请求失败'}</div>
+        </div>
+      `);
+    }
+  } catch (err) {
+    document.getElementById(loadingId)?.remove();
+    body.insertAdjacentHTML('beforeend', `
+      <div class="chat-message assistant">
+        <div class="chat-role">🤖 百炼助手</div>
+        <div style="color:var(--red)">❌ 网络错误: ${err.message}</div>
+      </div>
+    `);
+  } finally {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = '发送';
+    input.focus();
+    body.scrollTop = body.scrollHeight;
+  }
 }
 
 function _renderResearchContent(data) {
@@ -791,6 +1310,11 @@ async function doResearch(name, price, change, exposure) {
   const title = document.getElementById('researchPanelTitle');
   const body = document.getElementById('researchPanelBody');
 
+  // Set current research context for chat
+  currentResearch = { name, price, change, exposure: exposure || 'NA' };
+  chatHistory = [];  // Clear chat history for new research
+  _setChatEnabled(false);  // Disable chat until research loads
+
   const expDisp = exposure && exposure !== 'NA' ? fmtBig(Number(exposure)) : '未知';
   title.textContent = `🔍 ${name} 研究分析（当前敞口: ${expDisp}）`;
 
@@ -801,10 +1325,13 @@ async function doResearch(name, price, change, exposure) {
     body.innerHTML = _renderResearchContent(data);
     overlay.classList.add('show');
     panel.classList.add('show');
+    // Enable chat for cached results
+    chatHistory.push({ role: 'assistant', content: data.content });
+    _setChatEnabled(true);
     return;
   }
 
-  body.innerHTML = '<div class="loading-spinner">⏳ 正在联网搜索并调用 Copilot SDK 深度分析，请稍候（约60-90秒）...</div>';
+  body.innerHTML = '<div class="loading-spinner">⏳ 正在调用百炼RAG知识库深度分析，请稍候（约15-30秒）...</div>';
   overlay.classList.add('show');
   panel.classList.add('show');
 
@@ -816,6 +1343,10 @@ async function doResearch(name, price, change, exposure) {
     if (data.ok && data.content) {
       researchCache[name] = data;
       body.innerHTML = _renderResearchContent(data);
+      // Initialize chat history with the research content as context
+      chatHistory.push({ role: 'assistant', content: data.content });
+      // Enable chat after successful research
+      _setChatEnabled(true);
     } else {
       const errMsg = data.error || '未返回研究内容';
       body.innerHTML = `<div class="error-msg">❌ ${errMsg}</div>`;
@@ -840,7 +1371,7 @@ async function doResearchAll() {
   const title = document.getElementById('researchPanelTitle');
   const body = document.getElementById('researchPanelBody');
 
-  // Collect all visible tickers from OTHER_DATA
+  // Collect all visible tickers from all sector data
   const tickers = [];
   const nameI = colIdx['名称'];
   const tickerI = colIdx['标的物'];
@@ -848,20 +1379,43 @@ async function doResearchAll() {
   const changeI = colIdx['涨跌幅'];
   const exposureI = colIdx['风险敞口'];
 
-  for (const row of state.other.filtered) {
-    const name = row[nameI] || row[tickerI] || '';
-    if (!name) continue;
-    tickers.push({
-      name,
-      price: row[priceI] !== null && row[priceI] !== undefined ? String(row[priceI]) : 'NA',
-      change: row[changeI] !== null && row[changeI] !== undefined ? String(row[changeI]) : 'NA',
-      exposure: row[exposureI] !== null && row[exposureI] !== undefined ? String(row[exposureI]) : 'NA',
-    });
-  }
+  // Collect from all sectors (both domestic and overseas)
+  SECTOR_ORDER.forEach(sector => {
+    const secState = sectorStates[sector];
+    if (!secState) return;
+    
+    // Collect domestic
+    for (const row of (secState.domestic.filtered || [])) {
+      const name = row[nameI] || row[tickerI] || '';
+      if (!name) continue;
+      tickers.push({
+        name,
+        sector,
+        region: '境内',
+        price: row[priceI] !== null && row[priceI] !== undefined ? String(row[priceI]) : 'NA',
+        change: row[changeI] !== null && row[changeI] !== undefined ? String(row[changeI]) : 'NA',
+        exposure: row[exposureI] !== null && row[exposureI] !== undefined ? String(row[exposureI]) : 'NA',
+      });
+    }
+    
+    // Collect overseas
+    for (const row of (secState.overseas.filtered || [])) {
+      const name = row[nameI] || row[tickerI] || '';
+      if (!name) continue;
+      tickers.push({
+        name,
+        sector,
+        region: '境外',
+        price: row[priceI] !== null && row[priceI] !== undefined ? String(row[priceI]) : 'NA',
+        change: row[changeI] !== null && row[changeI] !== undefined ? String(row[changeI]) : 'NA',
+        exposure: row[exposureI] !== null && row[exposureI] !== undefined ? String(row[exposureI]) : 'NA',
+      });
+    }
+  });
 
   if (!tickers.length) {
     btn.disabled = false;
-    btn.textContent = '🔬 一键研究全部';
+    btn.textContent = '🔬 一键研究全部商品标的';
     batchRunning = false;
     return;
   }
@@ -990,7 +1544,7 @@ async function doResearchAll() {
   renderBatchPanel();
 
   btn.disabled = false;
-  btn.textContent = '🔬 一键研究全部';
+  btn.textContent = '🔬 一键研究全部商品标的';
   batchRunning = false;
 }
 
