@@ -34,3 +34,13 @@ Thumbs.db
 *.bak
 *.swp
 *~
+
+# Coremail credentials (never commit!)
+coremail/param.json
+
+# Downloads folder
+downloads/
+coremail/downloads/
+
+# Memory / data cache
+memory/

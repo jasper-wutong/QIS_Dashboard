@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QIS BOOK - {{ date_str }}</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #283548;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --yellow: #fbbf24;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .header h1 {
+    font-size: 22px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header .date-badge {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 16px; font-size: 13px; color: var(--text-muted);
+  }
+  .header .date-badge strong { color: var(--accent); }
+  .refresh-btn {
+    padding: 7px 16px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.2s;
+  }
+  .refresh-btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  .container { max-width: 1800px; margin: 0 auto; padding: 20px 40px 60px; }
+
+  .section-group { margin-bottom: 32px; }
+  .section-title {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .section-title h2 { font-size: 17px; font-weight: 600; }
+  .section-title .badge {
+    font-size: 12px; padding: 3px 12px; border-radius: 12px; font-weight: 600;
+  }
+  .badge-total { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .badge-domestic { background: rgba(52,211,153,0.15); color: var(--green); }
+  .badge-overseas { background: rgba(129,140,248,0.15); color: var(--accent2); }
+  .badge-etf { background: rgba(251,191,36,0.15); color: var(--yellow); }
+
+  /* ── Tabs ─────────────────────────────────── */
+  .book-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .book-tab {
+    padding: 10px 22px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; font-size: 14px; font-weight: 500;
+    transition: all 0.2s; user-select: none;
+  }
+  .book-tab:hover { background: var(--surface2); color: var(--text); }
+  .book-tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; border-color: transparent; font-weight: 600;
+  }
+  .book-tab .cnt {
+    display: inline-block; background: rgba(255,255,255,0.15);
+    border-radius: 10px; padding: 1px 8px; font-size: 11px; margin-left: 6px;
+  }
+
+  /* ── Summary Grid ────────────────────────── */
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .s-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .s-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+  .s-card .s-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
+  .s-card .s-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .s-card .s-value.pos { color: var(--green); }
+  .s-card .s-value.neg { color: var(--red); }
+  .s-card .s-value.neutral { color: var(--accent); }
+
+  /* ── Aggregate Banner ────────────────────── */
+  .agg-banner {
+    background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(129,140,248,0.08));
+    border: 1px solid rgba(56,189,248,0.2); border-radius: 12px;
+    padding: 20px 24px; margin-bottom: 24px;
+  }
+  .agg-banner .agg-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+  .agg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; }
+  .agg-item { background: rgba(15,23,42,0.5); border-radius: 8px; padding: 12px 14px; }
+  .agg-item .agg-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .agg-item .agg-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .agg-item .agg-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* ── Toolbar ──────────────────────────────── */
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .search-box { flex: 1; max-width: 340px; position: relative; }
+  .search-box input {
+    width: 100%; padding: 9px 14px 9px 36px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box svg {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); width: 15px; height: 15px;
+  }
+  .row-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+  .btn {
+    padding: 7px 18px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); cursor: pointer; font-size: 12px; transition: all 0.2s;
+  }
+  .btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  /* ── Table ───────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); max-height: 600px; overflow-y: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface2);
+    color: var(--text-muted); font-weight: 600; text-transform: uppercase;
+    font-size: 11px; letter-spacing: 0.3px; padding: 11px 12px;
+    border-bottom: 2px solid var(--border);
+    cursor: pointer; user-select: none; text-align: left; z-index: 2;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th.sort-asc::after { content: " ▲"; color: var(--accent); font-size: 10px; }
+  thead th.sort-desc::after { content: " ▼"; color: var(--accent); font-size: 10px; }
+  tbody tr { border-bottom: 1px solid rgba(51,65,85,0.5); transition: background 0.12s; }
+  tbody tr:hover { background: rgba(56,189,248,0.06); }
+  tbody tr:nth-child(even) { background: rgba(30,41,59,0.4); }
+  tbody tr:nth-child(even):hover { background: rgba(56,189,248,0.06); }
+  td { padding: 9px 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.pos { color: var(--green); }
+  td.neg { color: var(--red); }
+
+  /* ── Alert Row Highlights ────────────────── */
+  tr.alert-trade { background: rgba(178,248,248,0.12) !important; }
+  tr.alert-trade:hover { background: rgba(178,248,248,0.20) !important; }
+  tr.alert-force-close { background: rgba(255,179,71,0.15) !important; }
+  tr.alert-force-close:hover { background: rgba(255,179,71,0.25) !important; }
+  tr.alert-delta-zero td { color: var(--red) !important; }
+
+  .alert-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 10px; font-weight: 600; white-space: nowrap; margin-right: 4px;
+  }
+  .alert-tag.trade { background: rgba(34,211,238,0.2); color: var(--cyan); }
+  .alert-tag.delta-zero { background: rgba(248,113,113,0.2); color: var(--red); }
+  .alert-tag.force-close { background: rgba(255,179,71,0.2); color: var(--orange); }
+
+  /* ── Summary row ─────────────────────────── */
+  tr.summary-row td {
+    font-weight: 700; background: var(--surface2) !important;
+    border-top: 2px solid var(--accent);
+    position: sticky; bottom: 0; z-index: 1;
+  }
+
+  .no-data { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+  .loading { text-align: center; padding: 60px; color: var(--text-muted); font-size: 15px; }
+
+  ::-webkit-scrollbar { height: 7px; width: 7px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  @media (max-width: 900px) {
+    .container { padding: 14px; }
+    .header { padding: 14px; }
+    .agg-grid { grid-template-columns: repeat(2, 1fr); }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 QIS BOOK 拆解</h1>
+  <div class="header-right">
+    <button class="refresh-btn" onclick="window.location.href='/'">📊 返回Dashboard</button>
+    <button class="refresh-btn" onclick="refreshData()">🔄 刷新数据</button>
+    <div class="date-badge">Data: <strong id="dateLabel">{{ date_str }}</strong> &nbsp;|&nbsp; {{ now_time }}</div>
+  </div>
+</div>
+
+<div class="container" id="mainContainer">
+  <div class="loading" id="loadingMsg">加载数据中...</div>
+
+  <div id="bookContent" style="display:none;">
+
+    <!-- ── 汇总 Banner ───────────────────── -->
+    <div class="agg-banner">
+      <div class="agg-title">📋 QIS BOOK 汇总拆解</div>
+      <div class="agg-grid" id="aggGrid"></div>
+    </div>
+
+    <!-- ── Tab Navigation ────────────────── -->
+    <div class="book-tabs" id="bookTabs"></div>
+
+    <!-- ── 总和 Section ──────────────────── -->
+    <div class="section-group" id="sectionTotal">
+      <div class="section-title">
+        <h2>📋 总和</h2>
+        <span class="badge badge-total" id="badgeTotal"></span>
+      </div>
+      <div class="summary-grid" id="summaryTotal"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="searchTotal" placeholder="搜索...">
+        </div>
+        <span class="row-count" id="rowCountTotal"></span>
+        <button class="btn" onclick="exportCSV('total')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="headerTotal"></tr></thead><tbody id="bodyTotal"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ── 境内期货 Section ───────────────── -->
+    <div class="section-group" id="sectionDomesticFutures">
+      <div class="section-title">
+        <h2>🇨🇳 境内期货</h2>
+        <span class="badge badge-domestic" id="badgeDomesticFutures"></span>
+      </div>
+      <div class="summary-grid" id="summaryDomesticFutures"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="searchDomesticFutures" placeholder="搜索境内期货...">
+        </div>
+        <span class="row-count" id="rowCountDomesticFutures"></span>
+        <button class="btn" onclick="exportCSV('domestic_futures')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="headerDomesticFutures"></tr></thead><tbody id="bodyDomesticFutures"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ── 境外期货 Section ───────────────── -->
+    <div class="section-group" id="sectionOverseasFutures">
+      <div class="section-title">
+        <h2>🌍 境外期货</h2>
+        <span class="badge badge-overseas" id="badgeOverseasFutures"></span>
+      </div>
+      <div class="summary-grid" id="summaryOverseasFutures"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="searchOverseasFutures" placeholder="搜索境外期货...">
+        </div>
+        <span class="row-count" id="rowCountOverseasFutures"></span>
+        <button class="btn" onclick="exportCSV('overseas_futures')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="headerOverseasFutures"></tr></thead><tbody id="bodyOverseasFutures"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ── 境内ETF Section ───────────────── -->
+    <div class="section-group" id="sectionDomesticEtf">
+      <div class="section-title">
+        <h2>📈 境内ETF</h2>
+        <span class="badge badge-etf" id="badgeDomesticEtf"></span>
+      </div>
+      <div class="summary-grid" id="summaryDomesticEtf"></div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="searchDomesticEtf" placeholder="搜索境内ETF...">
+        </div>
+        <span class="row-count" id="rowCountDomesticEtf"></span>
+        <button class="btn" onclick="exportCSV('domestic_etf')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="headerDomesticEtf"></tr></thead><tbody id="bodyDomesticEtf"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Globals ───────────────────────────────────
+let COLUMNS, colIdx;
+let BOOK_DATA, BOOK_SUMMARIES;
+
+// Section configurations
+const SECTIONS = [
+  { key: 'total',            label: '📋 总和',       badgeClass: 'badge-total',    elemSuffix: 'Total',            isEtf: false },
+  { key: 'domestic_futures', label: '🇨🇳 境内期货', badgeClass: 'badge-domestic', elemSuffix: 'DomesticFutures',  isEtf: false },
+  { key: 'overseas_futures', label: '🌍 境外期货',   badgeClass: 'badge-overseas', elemSuffix: 'OverseasFutures',  isEtf: false },
+  { key: 'domestic_etf',     label: '📈 境内ETF',    badgeClass: 'badge-etf',      elemSuffix: 'DomesticEtf',      isEtf: true },
+];
+
+// Columns matching QIS_BOARD's "按合约代码" tab
+// For 总和/境内期货/境外期货 (14 columns):
+const SHOW_COLS_FUTURES = [
+  "Wind Ticker", "名称", "风险敞口", "T+1 风险敞口", "Delta($)",
+  "%Gamma($)", "Delta Shares", "Open Shares", "Need To Trade",
+  "T+1 Need to Trade", "Expiring Delta", "__trade_adj__", "Exposure pnl", "__alert__"
+];
+// For 境内ETF (13 columns — no 换月/调仓手数):
+const SHOW_COLS_ETF = [
+  "Wind Ticker", "名称", "风险敞口", "T+1 风险敞口", "Delta($)",
+  "%Gamma($)", "Delta Shares", "Open Shares", "Need To Trade",
+  "T+1 Need to Trade", "Expiring Delta", "Exposure pnl", "__alert__"
+];
+
+// Column display names for computed columns
+const COL_DISPLAY = {
+  "__trade_adj__": "换月/调仓手数",
+  "__alert__": "Alert"
+};
+
+// Numeric columns for formatting
+const numCols = new Set([
+  "Delta($)", "%Gamma($)", "风险敞口", "T+1 风险敞口",
+  "Delta Shares", "Open Shares", "Need To Trade",
+  "T+1 Need to Trade", "Expiring Delta", "Exposure pnl"
+]);
+// Integer-display columns
+const intCols = new Set([
+  "Delta Shares", "Open Shares", "Need To Trade",
+  "T+1 Need to Trade", "Expiring Delta"
+]);
+// Color-coded columns
+const colorCols = new Set([
+  "Delta($)", "%Gamma($)", "风险敞口", "T+1 风险敞口", "Exposure pnl"
+]);
+
+// Per-section state
+const sectionState = {};
+let activeTab = 'all';
+
+// ── Formatters ────────────────────────────────
+// Full number with commas, 2 decimal places, NO abbreviation
+function fmtNum(v) {
+  if (v === null || v === undefined || v === '') return "-";
+  if (typeof v !== 'number') return String(v);
+  return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Integer with commas
+function fmtInt(v) {
+  if (v === null || v === undefined || v === '') return "-";
+  if (typeof v !== 'number') return String(v);
+  return Math.round(v).toLocaleString("en-US");
+}
+// For summary banner only (abbreviated for overview)
+function fmtBig(v) {
+  if (v === null || v === undefined) return "-";
+  if (typeof v !== 'number') return String(v);
+  if (Math.abs(v) >= 1e8) return (v/1e8).toFixed(2) + "亿";
+  if (Math.abs(v) >= 1e4) return (v/1e4).toFixed(2) + "万";
+  return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+function valCls(v) { return v > 0 ? "pos" : v < 0 ? "neg" : "neutral"; }
+
+// ── Computed Values ───────────────────────────
+function getTradeAdj(row) {
+  const t1 = row[colIdx['T+1 Need to Trade']];
+  const ntt = row[colIdx['Need To Trade']];
+  if (typeof t1 !== 'number' || typeof ntt !== 'number') return 0;
+  return Math.round(t1 - ntt);
+}
+
+function getAlerts(row) {
+  const alerts = [];
+  const tags = [];
+
+  // 1. 换月/调仓: abs(trade_adjustment) >= 0.5
+  const tradeAdj = getTradeAdj(row);
+  if (Math.abs(tradeAdj) >= 0.5) {
+    alerts.push("换月/调仓");
+    tags.push("trade");
+  }
+
+  // 2. Delta为0清持仓: abs(delta_shares) < 0.5 AND abs(open_shares) > 0.5
+  const ds = row[colIdx['Delta Shares']];
+  const os = row[colIdx['Open Shares']];
+  if (typeof ds === 'number' && typeof os === 'number') {
+    if (Math.abs(ds) < 0.5 && Math.abs(os) > 0.5) {
+      alerts.push("Delta为0清持仓");
+      tags.push("delta-zero");
+    }
+  }
+
+  return { text: alerts.join(", "), tags };
+}
+
+// Row class based on alerts
+function getRowClass(row) {
+  const classes = [];
+  const tradeAdj = getTradeAdj(row);
+  if (Math.abs(tradeAdj) >= 0.5) classes.push("alert-trade");
+
+  const ds = row[colIdx['Delta Shares']];
+  const os = row[colIdx['Open Shares']];
+  if (typeof ds === 'number' && typeof os === 'number') {
+    if (Math.abs(ds) < 0.5 && Math.abs(os) > 0.5) classes.push("alert-delta-zero");
+  }
+
+  return classes.join(" ");
+}
+
+// ── Load Data ─────────────────────────────────
+async function loadData() {
+  const resp = await fetch("/api/book-data");
+  const d = await resp.json();
+
+  COLUMNS = d.columns;
+  BOOK_DATA = d.book_data;
+  BOOK_SUMMARIES = d.book_summaries;
+
+  colIdx = {};
+  COLUMNS.forEach((c, i) => colIdx[c] = i);
+
+  SECTIONS.forEach(sec => {
+    const data = BOOK_DATA[sec.key] || [];
+    sectionState[sec.key] = {
+      data: data,
+      filtered: [...data],
+      sortCol: -1,
+      sortDir: 0
+    };
+  });
+
+  document.getElementById("dateLabel").textContent = d.date_str;
+  document.getElementById("loadingMsg").style.display = "none";
+  document.getElementById("bookContent").style.display = "block";
+
+  renderAll();
+}
+
+function renderAll() {
+  renderAggBanner();
+  renderTabs();
+  SECTIONS.forEach(sec => {
+    renderSummaryCards(sec);
+    renderHeader(sec);
+    applyFilter(sec.key);
+  });
+}
+
+async function refreshData() {
+  document.getElementById("bookContent").style.display = "none";
+  document.getElementById("loadingMsg").style.display = "block";
+  document.getElementById("loadingMsg").textContent = "刷新数据中...";
+  await fetch("/api/refresh");
+  await loadData();
+}
+
+// ── Aggregate Banner ──────────────────────────
+function renderAggBanner() {
+  const total = BOOK_SUMMARIES.total || {};
+  const df = BOOK_SUMMARIES.domestic_futures || {};
+  const of_ = BOOK_SUMMARIES.overseas_futures || {};
+  const etf = BOOK_SUMMARIES.domestic_etf || {};
+
+  const items = [
+    {label:"持仓总数", val: total.count || 0, sub:`境内期货 ${df.count||0} / 境外期货 ${of_.count||0} / ETF ${etf.count||0}`},
+    {label:"汇总 Delta($)", val: total.delta || 0, sub:`境内 ${fmtBig(df.delta||0)} / 境外 ${fmtBig(of_.delta||0)} / ETF ${fmtBig(etf.delta||0)}`},
+    {label:"汇总 %Gamma($)", val: total.gamma || 0, sub:`境内 ${fmtBig(df.gamma||0)} / 境外 ${fmtBig(of_.gamma||0)} / ETF ${fmtBig(etf.gamma||0)}`},
+    {label:"汇总 风险敞口", val: total.exposure || 0, sub:`境内 ${fmtBig(df.exposure||0)} / 境外 ${fmtBig(of_.exposure||0)} / ETF ${fmtBig(etf.exposure||0)}`},
+    {label:"汇总 Exposure PnL", val: total.exposure_pnl || 0, sub:`境内 ${fmtBig(df.exposure_pnl||0)} / 境外 ${fmtBig(of_.exposure_pnl||0)} / ETF ${fmtBig(etf.exposure_pnl||0)}`},
+  ];
+  document.getElementById("aggGrid").innerHTML = items.map(it => `
+    <div class="agg-item">
+      <div class="agg-label">${it.label}</div>
+      <div class="agg-val ${typeof it.val === 'number' ? valCls(it.val) : 'neutral'}">${typeof it.val === 'number' ? fmtBig(it.val) : it.val}</div>
+      <div class="agg-sub">${it.sub}</div>
+    </div>
+  `).join("");
+}
+
+// ── Tab Navigation ────────────────────────────
+function renderTabs() {
+  const tabsEl = document.getElementById('bookTabs');
+  const totalCount = (BOOK_DATA.total || []).length;
+  const dfCount = (BOOK_DATA.domestic_futures || []).length;
+  const ofCount = (BOOK_DATA.overseas_futures || []).length;
+  const etfCount = (BOOK_DATA.domestic_etf || []).length;
+
+  const tabs = [
+    { key: 'all', label: '全部', count: totalCount },
+    { key: 'total', label: '📋 总和', count: totalCount },
+    { key: 'domestic_futures', label: '🇨🇳 境内期货', count: dfCount },
+    { key: 'overseas_futures', label: '🌍 境外期货', count: ofCount },
+    { key: 'domestic_etf', label: '📈 境内ETF', count: etfCount },
+  ];
+  tabsEl.innerHTML = tabs.map(t =>
+    `<div class="book-tab ${activeTab === t.key ? 'active' : ''}" onclick="switchTab('${t.key}')">${t.label}<span class="cnt">${t.count}</span></div>`
+  ).join("");
+}
+
+function switchTab(key) {
+  activeTab = key;
+  renderTabs();
+  SECTIONS.forEach(sec => {
+    const el = document.getElementById('section' + sec.elemSuffix);
+    if (!el) return;
+    el.style.display = (key === 'all' || key === sec.key) ? 'block' : 'none';
+  });
+}
+
+// ── Summary Cards ─────────────────────────────
+function renderSummaryCards(sec) {
+  const summary = BOOK_SUMMARIES[sec.key] || {};
+  const el = document.getElementById('summary' + sec.elemSuffix);
+  const badgeEl = document.getElementById('badge' + sec.elemSuffix);
+  if (!el) return;
+  badgeEl.textContent = (summary.count || 0) + " 个标的";
+
+  const keys = [
+    ["Delta($)", "delta"], ["%Gamma($)", "gamma"],
+    ["风险敞口", "exposure"], ["Exposure PnL", "exposure_pnl"],
+    ["Delta Shares", "delta_shares"], ["Open Shares", "open_shares"],
+    ["Need To Trade", "need_to_trade"],
+  ];
+  el.innerHTML = keys.map(([lbl, key]) => `
+    <div class="s-card">
+      <div class="s-label">${lbl}</div>
+      <div class="s-value ${valCls(summary[key] || 0)}">${fmtBig(summary[key] || 0)}</div>
+    </div>
+  `).join("");
+}
+
+// ── Get columns for a section ─────────────────
+function getShowCols(sec) {
+  return sec.isEtf ? SHOW_COLS_ETF : SHOW_COLS_FUTURES;
+}
+function getColName(c) {
+  return COL_DISPLAY[c] || c;
+}
+
+// ── Table Header ──────────────────────────────
+function renderHeader(sec) {
+  const s = sectionState[sec.key];
+  const showCols = getShowCols(sec);
+  const tr = document.getElementById('header' + sec.elemSuffix);
+  if (!tr || !s) return;
+
+  tr.innerHTML = showCols.map((c, si) => {
+    let cls = s.sortCol === si ? (s.sortDir === 1 ? "sort-asc" : "sort-desc") : "";
+    return `<th class="${cls}" onclick="doSort('${sec.key}',${si})">${getColName(c)}</th>`;
+  }).join("");
+}
+
+function doSort(secKey, si) {
+  const s = sectionState[secKey];
+  if (!s) return;
+  if (s.sortCol === si) s.sortDir = s.sortDir === 1 ? -1 : s.sortDir === -1 ? 0 : 1;
+  else { s.sortCol = si; s.sortDir = 1; }
+  const sec = SECTIONS.find(x => x.key === secKey);
+  if (sec) { renderHeader(sec); applyFilter(secKey); }
+}
+
+// ── Get sortable value ────────────────────────
+function getSortVal(row, col) {
+  if (col === '__trade_adj__') return getTradeAdj(row);
+  if (col === '__alert__') return getAlerts(row).text;
+  const ci = colIdx[col];
+  if (ci === undefined) return null;
+  return row[ci];
+}
+
+// ── Filter & Render ───────────────────────────
+function applyFilter(secKey) {
+  const s = sectionState[secKey];
+  if (!s) return;
+  const sec = SECTIONS.find(x => x.key === secKey);
+  if (!sec) return;
+  const showCols = getShowCols(sec);
+
+  const searchEl = document.getElementById('search' + sec.elemSuffix);
+  const q = searchEl ? searchEl.value.toLowerCase() : '';
+
+  s.filtered = s.data.filter(r => {
+    if (!q) return true;
+    for (const c of showCols) {
+      if (c.startsWith('__')) continue;
+      const ci = colIdx[c];
+      if (ci !== undefined && r[ci] !== null && String(r[ci]).toLowerCase().includes(q)) return true;
+    }
+    if (getAlerts(r).text.toLowerCase().includes(q)) return true;
+    return false;
+  });
+
+  if (s.sortDir !== 0 && s.sortCol >= 0) {
+    const col = showCols[s.sortCol];
+    s.filtered.sort((a, b) => {
+      let va = getSortVal(a, col), vb = getSortVal(b, col);
+      if (va === null || va === undefined) return 1;
+      if (vb === null || vb === undefined) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * s.sortDir;
+      return String(va).localeCompare(String(vb)) * s.sortDir;
+    });
+  }
+
+  renderTable(secKey);
+}
+
+// ── Format a cell value ───────────────────────
+function fmtCell(col, v) {
+  if (v === null || v === undefined) return "-";
+  if (!numCols.has(col) || typeof v !== 'number') return String(v);
+  return intCols.has(col) ? fmtInt(v) : fmtNum(v);
+}
+
+function renderTable(secKey) {
+  const s = sectionState[secKey];
+  if (!s) return;
+  const sec = SECTIONS.find(x => x.key === secKey);
+  if (!sec) return;
+  const showCols = getShowCols(sec);
+
+  const tbody = document.getElementById('body' + sec.elemSuffix);
+  const rowCountEl = document.getElementById('rowCount' + sec.elemSuffix);
+  if (!tbody) return;
+
+  rowCountEl.textContent = s.filtered.length + " rows";
+
+  if (!s.filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="${showCols.length}" class="no-data">暂无数据</td></tr>`;
+    return;
+  }
+
+  // ── Data rows ──────────────────────────
+  let html = s.filtered.map(row => {
+    const rowCls = getRowClass(row);
+    const tradeAdj = getTradeAdj(row);
+    const alerts = getAlerts(row);
+
+    return `<tr class="${rowCls}">` + showCols.map(c => {
+      // 换月/调仓手数 (computed)
+      if (c === '__trade_adj__') {
+        if (tradeAdj === 0) return `<td class="num">-</td>`;
+        const cls = "num" + (tradeAdj > 0 ? " pos" : tradeAdj < 0 ? " neg" : "");
+        return `<td class="${cls}">${fmtInt(tradeAdj)}</td>`;
+      }
+      // Alert (computed)
+      if (c === '__alert__') {
+        if (!alerts.text) return `<td>-</td>`;
+        const tagsHtml = alerts.tags.map(t => `<span class="alert-tag ${t}">${
+          t === 'trade' ? '换月/调仓' :
+          t === 'delta-zero' ? 'Delta为0清持仓' :
+          t === 'force-close' ? '将被强平' : t
+        }</span>`).join('');
+        return `<td>${tagsHtml}</td>`;
+      }
+
+      const ci = colIdx[c];
+      if (ci === undefined) return `<td>-</td>`;
+      const v = row[ci];
+
+      // Text columns
+      if (c === 'Wind Ticker' || c === '名称') {
+        return `<td>${v != null ? v : '-'}</td>`;
+      }
+
+      // Numeric columns
+      if (numCols.has(c) && typeof v === 'number') {
+        let cls = "num";
+        if (colorCols.has(c)) {
+          if (v > 0) cls += " pos";
+          else if (v < 0) cls += " neg";
+        }
+        return `<td class="${cls}">${fmtCell(c, v)}</td>`;
+      }
+
+      return `<td>${v != null ? v : '-'}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+
+  // ── Summary (总计) row ─────────────────
+  const summary = calcTableSummary(s.filtered, sec.isEtf);
+  html += `<tr class="summary-row">` + showCols.map(c => {
+    if (c === 'Wind Ticker') return `<td style="color:var(--accent)">总计</td>`;
+    if (c === '名称') return `<td></td>`;
+    if (c === '__alert__') return `<td></td>`;
+
+    if (c === '__trade_adj__') {
+      const v = summary._trade_adj || 0;
+      if (v === 0) return `<td class="num">-</td>`;
+      return `<td class="num ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${fmtInt(v)}</td>`;
+    }
+
+    const v = summary[c];
+    if (v !== undefined && typeof v === 'number') {
+      let cls = "num";
+      if (colorCols.has(c)) {
+        if (v > 0) cls += " pos";
+        else if (v < 0) cls += " neg";
+      }
+      return `<td class="${cls}">${fmtCell(c, v)}</td>`;
+    }
+    return `<td></td>`;
+  }).join("") + `</tr>`;
+
+  tbody.innerHTML = html;
+}
+
+function calcTableSummary(rows, isEtf) {
+  const sumCols = [
+    "风险敞口", "T+1 风险敞口", "Delta($)", "%Gamma($)",
+    "Delta Shares", "Open Shares", "Need To Trade",
+    "T+1 Need to Trade", "Expiring Delta", "Exposure pnl"
+  ];
+  const result = {};
+  sumCols.forEach(col => {
+    const ci = colIdx[col];
+    if (ci === undefined) return;
+    let total = 0;
+    rows.forEach(r => {
+      const v = r[ci];
+      if (typeof v === 'number') total += v;
+    });
+    result[col] = total;
+  });
+
+  if (!isEtf) {
+    let adjTotal = 0;
+    rows.forEach(r => { adjTotal += getTradeAdj(r); });
+    result._trade_adj = adjTotal;
+  }
+
+  return result;
+}
+
+// ── Export CSV ─────────────────────────────────
+function exportCSV(secKey) {
+  const s = sectionState[secKey];
+  if (!s) return;
+  const sec = SECTIONS.find(x => x.key === secKey);
+  if (!sec) return;
+  const showCols = getShowCols(sec);
+  const data = s.filtered;
+
+  const hdr = showCols.map(c => getColName(c)).join(",");
+  const rows = data.map(r => showCols.map(c => {
+    if (c === '__trade_adj__') return getTradeAdj(r);
+    if (c === '__alert__') return `"${getAlerts(r).text}"`;
+    const ci = colIdx[c];
+    if (ci === undefined) return "";
+    const v = r[ci];
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string" && v.includes(",")) return `"${v}"`;
+    return v;
+  }).join(","));
+  const csv = "\uFEFF" + hdr + "\n" + rows.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `QIS_BOOK_${secKey}_${document.getElementById("dateLabel").textContent}.csv`;
+  a.click();
+}
+
+// ── Search listeners ──────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  SECTIONS.forEach(sec => {
+    const el = document.getElementById('search' + sec.elemSuffix);
+    if (el) el.addEventListener('input', () => applyFilter(sec.key));
+  });
+});
+
+// ── Init ──────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>

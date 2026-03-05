@@ -1,0 +1,12 @@
+{
+  "users": {
+    "me": {
+      "uid": "your.name@cicc.com.cn",
+      "password": "your_password_here"
+    },
+    "pricing": {
+      "uid": "eqd_eds_pricing@cicc.com.cn",
+      "password": "pricing_password_here"
+    }
+  }
+}

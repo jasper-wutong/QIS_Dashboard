@@ -151,10 +151,26 @@ async def search_web(params: WebSearchParams) -> str:
 
 
 def _get_cli_path() -> str:
-    cli_path = os.getenv("COPILOT_CLI_PATH") or shutil.which("copilot")
-    if not cli_path:
-        raise RuntimeError("copilot CLI not found")
-    return cli_path
+    # First check environment variable
+    cli_path = os.getenv("COPILOT_CLI_PATH")
+    if cli_path:
+        return cli_path
+    
+    # Check common Windows installation paths for the actual .exe
+    common_paths = [
+        Path.home() / "AppData" / "Local" / "GitHub" / "copilot-cli" / "copilot.exe",
+        Path.home() / "AppData" / "Roaming" / "GitHub" / "copilot-cli" / "copilot.exe",
+    ]
+    for p in common_paths:
+        if p.exists():
+            return str(p)
+    
+    # Fallback to which (may return .BAT which doesn't work well)
+    cli_path = shutil.which("copilot")
+    if cli_path and cli_path.lower().endswith(".exe"):
+        return cli_path
+    
+    raise RuntimeError("copilot CLI not found")
 
 
 def _build_provider_from_env() -> Optional[Dict[str, Any]]:
@@ -365,7 +381,7 @@ async def run_research(
         session = await client.create_session(config)
         try:
             prompt = _build_prompt(name, price, change, exposure)
-            response = await session.send_and_wait({"prompt": prompt}, timeout=180)
+            response = await session.send_and_wait({"prompt": prompt}, timeout=240)
             content = ""
             if response and getattr(response, "data", None):
                 content = getattr(response.data, "content", "") or ""
@@ -378,6 +394,101 @@ async def run_research(
             }
         finally:
             await session.destroy()
+    except asyncio.CancelledError as exc:
+        return {
+            "ok": False,
+            "name": name,
+            "error": f"Request cancelled (timeout or cancellation): {exc}",
+            "content": "",
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "name": name,
+            "error": str(exc),
+            "content": "",
+        }
+    finally:
+        await client.stop()
+
+
+async def run_chat(
+    name: str,
+    message: str,
+    history: list,
+    price: str = "NA",
+    change: str = "NA",
+    exposure: str = "NA",
+) -> Dict[str, Any]:
+    """Continue conversation with Copilot SDK about a specific ticker."""
+    client = CopilotClient(
+        {
+            "cli_path": _get_cli_path(),
+            "cwd": str(Path.cwd()),
+            "log_level": os.getenv("COPILOT_LOG_LEVEL", "info"),
+        }
+    )
+    await client.start()
+    try:
+        model = await _resolve_model(client)
+        config: Dict[str, Any] = {
+            "model": model,
+            "streaming": False,
+            "tools": [search_web],
+        }
+
+        provider = _build_provider_from_env()
+        if provider:
+            config["provider"] = provider
+
+        session = await client.create_session(config)
+        try:
+            # Build context-aware system message
+            exposure_display = _fmt_exposure(exposure)
+            system_context = f"""你是一名资深金融大宗商品与衍生品研究分析师。
+当前讨论的标的: {name}
+当前价格: {price}
+涨跌幅: {change}
+当前风险敞口: {exposure_display}
+
+请基于上下文，简洁专业地回答用户问题。可使用search_web工具获取最新信息。"""
+            
+            # Build conversation messages
+            messages = [{"role": "system", "content": system_context}]
+            for h in history:
+                messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+            messages.append({"role": "user", "content": message})
+            
+            # Format as a single prompt with conversation context
+            prompt_parts = []
+            for m in messages[1:]:  # Skip system (already set as context)
+                role_label = "用户" if m["role"] == "user" else "助手"
+                prompt_parts.append(f"【{role_label}】: {m['content']}")
+            prompt = "\n\n".join(prompt_parts)
+            
+            # Include system context at the start
+            full_prompt = f"{system_context}\n\n--- 对话历史 ---\n\n{prompt}"
+            
+            response = await session.send_and_wait({"prompt": full_prompt}, timeout=120)
+            content = ""
+            if response and getattr(response, "data", None):
+                content = getattr(response.data, "content", "") or ""
+
+            return {
+                "ok": True,
+                "name": name,
+                "model": model,
+                "content": content.strip(),
+            }
+        finally:
+            await session.destroy()
+    except asyncio.CancelledError as exc:
+        return {
+            "ok": False,
+            "name": name,
+            "error": f"Chat cancelled: {exc}",
+            "content": "",
+        }
     except Exception as exc:
         return {
             "ok": False,
@@ -458,11 +569,20 @@ def main() -> None:
     parser.add_argument("--change", default="NA", help="Price change ratio")
     parser.add_argument("--exposure", default="NA", help="Current risk exposure in yuan")
     parser.add_argument("--batch-json", default=None, help="JSON array of tickers for batch mode")
+    parser.add_argument("--chat", default=None, help="Chat message for follow-up questions")
+    parser.add_argument("--history", default="[]", help="JSON array of chat history")
     args = parser.parse_args()
 
     if args.batch_json:
         tickers = json.loads(args.batch_json)
         result = asyncio.run(run_batch_research(tickers))
+    elif args.chat and args.name:
+        # Chat mode: follow-up conversation
+        history = json.loads(args.history)
+        result = asyncio.run(run_chat(
+            args.name, args.chat, history,
+            args.price, args.change, args.exposure
+        ))
     elif args.name:
         result = asyncio.run(run_research(args.name, args.price, args.change, args.exposure))
     else:

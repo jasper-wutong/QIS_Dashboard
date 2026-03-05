@@ -240,6 +240,36 @@ def resolve_sector(ticker_str, underlying_str=None):
     return "其他"
 
 
+# ── 境内期货交易所后缀 ─────────────────────────────────────────────────────────
+DOMESTIC_FUTURES_SUFFIXES = ('.SHF', '.DCE', '.CZC', '.INE', '.CFE')
+
+
+def resolve_instrument_type(ticker_str):
+    """分类 ticker 为 '境内期货' / '境外期货' / '境内ETF'。
+
+    分类规则（对齐 QIS_BOARD）：
+      - 境内期货: .SHF / .DCE / .CZC / .INE / .CFE
+      - 境内ETF:  属于 ETF_NAME_MAP（.SH / .SZ 的 ETF 和指数）
+      - 境外期货: 其余（.HK / Bloomberg Index|Comdty / Eurex）
+    """
+    if pd.isna(ticker_str):
+        return "境内期货"  # fallback
+    ticker = str(ticker_str).strip()
+    if not ticker:
+        return "境内期货"
+
+    # 境内期货: domestic futures exchanges
+    if any(ticker.upper().endswith(sfx) for sfx in DOMESTIC_FUTURES_SUFFIXES):
+        return "境内期货"
+
+    # 境内 ETF / 指数
+    if ticker in ETF_NAME_MAP:
+        return "境内ETF"
+
+    # 其余均为境外期货
+    return "境外期货"
+
+
 def resolve_region(ticker_str, underlying_str=None):
     """根据 Wind Ticker 或 标的物 解析境内/境外。
 

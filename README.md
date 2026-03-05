@@ -12,6 +12,7 @@
 - 📈 QIS子账簿分析
 - 🔍 股票代码映射与查询
 - 🤖 集成Copilot SDK支持
+- 📧 Coremail邮件系统集成（研报下载）
 
 ## 安装步骤
 
@@ -56,6 +57,25 @@ python app.py
 python research_cli.py
 ```
 
+### Coremail 邮件工具
+
+用于从 CICC Coremail 系统下载研报。详细说明请查看 [coremail/README.md](coremail/README.md)
+
+```bash
+# 进入 coremail 目录
+cd coremail
+
+# 配置账号（首次使用）
+Copy-Item param.json.example param.json
+# 编辑 param.json 填入邮箱和密码
+
+# 测试邮件发送
+python test_send_email.py
+
+# 下载期货研报
+python download_futures_reports.py
+```
+
 ## 项目结构
 
 ```
@@ -64,6 +84,13 @@ QIS_Dashboard/
 ├── research_cli.py                 # 命令行研究工具
 ├── ticker_mapping.py               # 股票代码映射
 ├── QIS_SubBook_Analysis.ipynb     # Jupyter分析笔记本
+├── coremail/                      # Coremail邮件系统工具
+│   ├── coremail_utils.py          # Coremail底层API
+│   ├── coremail_helper.py         # 邮件助手类
+│   ├── download_futures_reports.py    # 下载期货研报(概要版)
+│   ├── download_detailed_reports.py   # 下载期货研报(完整版)
+│   ├── test_send_email.py         # 邮件发送测试
+│   └── README.md                  # Coremail使用说明
 ├── templates/
 │   └── dashboard.html             # Dashboard模板
 ├── copilot-sdk/                   # Copilot SDK

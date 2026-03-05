@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 from flask import Flask, jsonify, request, render_template
-from ticker_mapping import populate_names, resolve_sector, resolve_region, SECTOR_ORDER, SECTOR_ICONS
+from ticker_mapping import populate_names, resolve_sector, resolve_region, resolve_instrument_type, SECTOR_ORDER, SECTOR_ICONS
 
 # 导入新闻聚合模块
 from news.news_fetcher import fetch_all_news, fetch_category_news
@@ -77,6 +77,7 @@ def aggregate_by_wind_ticker(df: pd.DataFrame) -> pd.DataFrame:
         "现货市值", "期货市值", "风险敞口", "T+1 风险敞口", "风险敞口(PDE)",
         "当日损益", "当日损益(PDE)", "当日损益(合约端)", "当日损益(对冲端)",
         "存续名义本金", "Delta Shares", "Open Shares", "Need To Trade",
+        "T+1 Need to Trade", "Expiring Delta",
         "Exposure pnl", "Gamma pnl", "Theta pnl", "Vega pnl",
         "Borrow pnl", "Residual",
     ]
@@ -103,6 +104,10 @@ def calc_summary(frame: pd.DataFrame) -> dict:
         "pnl_contract": s("当日损益(合约端)"),
         "pnl_hedge": s("当日损益(对冲端)"),
         "notional": s("存续名义本金"),
+        "exposure_pnl": s("Exposure pnl"),
+        "delta_shares": s("Delta Shares"),
+        "open_shares": s("Open Shares"),
+        "need_to_trade": s("Need To Trade"),
     }
 
 
@@ -160,6 +165,27 @@ def process_data(df_qis: pd.DataFrame, date_str: str) -> dict:
             # 汇总也用聚合后的数据，保证和表格显示一致
             sector_summaries[sector] = calc_summary(df_sec)
 
+    # ── QIS BOOK: 按合约类型拆分（境内期货 / 境外期货 / 境内ETF）
+    df_other["_instrument_type"] = df_other.apply(
+        lambda row: resolve_instrument_type(row.get("Wind Ticker")), axis=1
+    )
+    df_domestic_futures = df_other[df_other["_instrument_type"] == "境内期货"]
+    df_overseas_futures = df_other[df_other["_instrument_type"] == "境外期货"]
+    df_domestic_etf = df_other[df_other["_instrument_type"] == "境内ETF"]
+
+    book_data = {
+        "total": to_records(df_other, columns),
+        "domestic_futures": to_records(df_domestic_futures, columns) if not df_domestic_futures.empty else [],
+        "overseas_futures": to_records(df_overseas_futures, columns) if not df_overseas_futures.empty else [],
+        "domestic_etf": to_records(df_domestic_etf, columns) if not df_domestic_etf.empty else [],
+    }
+    book_summaries = {
+        "total": calc_summary(df_other),
+        "domestic_futures": calc_summary(df_domestic_futures),
+        "overseas_futures": calc_summary(df_overseas_futures),
+        "domestic_etf": calc_summary(df_domestic_etf),
+    }
+
     return {
         "columns": columns,
         "subbooks": subbooks,
@@ -177,6 +203,8 @@ def process_data(df_qis: pd.DataFrame, date_str: str) -> dict:
         "index_count": len(df_index),
         "other_raw_count": len(df_other_raw),
         "other_merged_count": len(df_other),
+        "book_data": book_data,
+        "book_summaries": book_summaries,
     }
 
 
@@ -239,6 +267,29 @@ def refresh():
     RESEARCH_CACHE.clear()
     CACHE_DATE = DATE_STR
     return jsonify({"status": "ok", "date_str": DATE_STR})
+
+
+# -- QIS BOOK routes -----------------------------------------------------------
+
+@app.route("/qis-book")
+def qis_book_page():
+    """QIS BOOK 拆解展示页面"""
+    return render_template(
+        "qis_book.html",
+        date_str=DATE_STR,
+        now_time=datetime.now().strftime("%H:%M"),
+    )
+
+
+@app.route("/api/book-data")
+def api_book_data():
+    """返回 QIS BOOK 拆解数据（境内期货 / 境外期货 / 境内ETF）"""
+    return jsonify({
+        "columns": DATA["columns"],
+        "book_data": DATA["book_data"],
+        "book_summaries": DATA["book_summaries"],
+        "date_str": DATE_STR,
+    })
 
 
 # -- News routes ---------------------------------------------------------------
