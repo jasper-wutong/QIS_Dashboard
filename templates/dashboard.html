@@ -289,6 +289,8 @@
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.pos { color: var(--green); }
   td.neg { color: var(--red); }
+  tr.big-move { background: rgba(251,191,36,0.13) !important; }
+  tr.big-move:hover { background: rgba(251,191,36,0.23) !important; }
 
   .sb-badge { display: inline-block; padding: 2px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
   .sb-QISARES { background: rgba(56,189,248,0.15); color: var(--accent); }
@@ -646,11 +648,11 @@ let sectorStates = {};  // {sectorName: {filtered: [], sortCol: -1, sortDir: 0}}
 let currentResearch = null;  // {name, price, change, exposure} for chat context
 let chatHistory = [];  // [{role: 'user'|'assistant', content: string}]
 
-const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","Vega($)","Theta","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","SubBook","BookID"];
-const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","%Gamma($)","Vega($)","Theta","风险敞口","__estimated_pnl__","__research__"];
+const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","SubBook","BookID"];
+const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","%Gamma($)","风险敞口","__estimated_pnl__","__research__"];
 
 const numCols = new Set(["现价","涨跌幅","Delta($)","SOD Delta($)","PDE Delta($)","%Gamma($)","PDE Gamma(%)","Vega($)","FX Vega($)","Theta","现货市值","期货市值","风险敞口","T+1 风险敞口","风险敞口(PDE)","当日损益","当日损益(PDE)","当日损益(合约端)","当日损益(对冲端)","存续名义本金","Delta Shares","Open Shares","Need To Trade","Exposure pnl","Gamma pnl","Theta pnl","Vega pnl","Borrow pnl","Residual"]);
-const colorCols = new Set(["涨跌幅","当日损益","当日损益(合约端)","当日损益(对冲端)","Delta($)","Theta","Vega($)","%Gamma($)"]);
+const colorCols = new Set(["涨跌幅","当日损益","当日损益(合约端)","当日损益(对冲端)","Delta($)","%Gamma($)"]);
 
 const state = {
   index: { book: "ALL", sortCol: -1, sortDir: 0, filtered: [] },
@@ -763,8 +765,7 @@ function renderAgg() {
     {label:"持仓总数", val:TOTAL_SUMMARY.count, sub:`指数 ${INDEX_SUMMARY.count} / 商品 ${OTHER_SUMMARY.count}`},
     {label:"汇总 Delta($)", val:TOTAL_SUMMARY.delta, sub:`指 ${fmtBig(INDEX_SUMMARY.delta)} / 商 ${fmtBig(OTHER_SUMMARY.delta)}`},
     {label:"汇总 SOD Delta($)", val:TOTAL_SUMMARY.sod_delta, sub:`指 ${fmtBig(INDEX_SUMMARY.sod_delta)} / 商 ${fmtBig(OTHER_SUMMARY.sod_delta)}`},
-    {label:"汇总 Theta($)", val:TOTAL_SUMMARY.theta, sub:`指 ${fmtBig(INDEX_SUMMARY.theta)} / 商 ${fmtBig(OTHER_SUMMARY.theta)}`},
-    {label:"汇总 Vega($)", val:TOTAL_SUMMARY.vega, sub:`指 ${fmtBig(INDEX_SUMMARY.vega)} / 商 ${fmtBig(OTHER_SUMMARY.vega)}`},
+
     {label:"汇总 %Gamma($)", val:TOTAL_SUMMARY.gamma, sub:`指 ${fmtBig(INDEX_SUMMARY.gamma)} / 商 ${fmtBig(OTHER_SUMMARY.gamma)}`},
     {label:"汇总 当日损益", val:TOTAL_SUMMARY.pnl, sub:`指 ${fmtBig(INDEX_SUMMARY.pnl)} / 商 ${fmtBig(OTHER_SUMMARY.pnl)}`},
     {label:"汇总 风险敞口", val:TOTAL_SUMMARY.exposure, sub:`指 ${fmtBig(INDEX_SUMMARY.exposure)} / 商 ${fmtBig(OTHER_SUMMARY.exposure)}`},
@@ -784,8 +785,7 @@ function renderAgg() {
 // ── Summary Cards ─────────────────────────────
 function renderSummaryCards(elId, summary, kind) {
   const keys = [
-    ["Delta($)", "delta"], ["SOD Delta($)", "sod_delta"], ["Theta($)", "theta"],
-    ["Vega($)", "vega"], ["%Gamma($)", "gamma"], ["当日损益", "pnl"],
+    ["Delta($)", "delta"], ["SOD Delta($)", "sod_delta"], ["%Gamma($)", "gamma"], ["当日损益", "pnl"],
     ["风险敞口", "exposure"], ["存续名义本金", "notional"],
     ["损益(合约端)", "pnl_contract"], ["损益(对冲端)", "pnl_hedge"],
   ];
@@ -926,7 +926,7 @@ function renderSectorSummary(sector) {
   const estimatedPnl = calcSectorEstimatedPnl(sector);
   
   const keys = [
-    ["Delta($)", "delta"], ["%Gamma($)", "gamma"], ["Theta($)", "theta"], ["Vega($)", "vega"],
+    ["Delta($)", "delta"], ["%Gamma($)", "gamma"],
     ["当日损益", "pnl"], ["风险敞口", "exposure"],
   ];
   el.innerHTML = keys.map(([lbl, key]) => `
@@ -1015,7 +1015,8 @@ function renderRegionTable(sector, region) {
     const estimatedPnl = (typeof exposure === 'number' && typeof change === 'number') ? exposure * change : null;
     row._estimatedPnl = estimatedPnl;  // Store for sorting
     
-    return "<tr>" + othShowI.map(ci => {
+    const rowClass = (typeof change === 'number' && Math.abs(change) > 0.02) ? ' class="big-move"' : '';
+    return `<tr${rowClass}>` + othShowI.map(ci => {
       if (ci === -998) {
         // Estimated PnL column
         if (estimatedPnl === null) return `<td class="num">-</td>`;
@@ -1118,7 +1119,10 @@ function renderTable(kind) {
     return;
   }
 
-  tbody.innerHTML = s.filtered.map(row => "<tr>" + showI.map(ci => {
+  tbody.innerHTML = s.filtered.map(row => {
+    const chg = row[colIdx['涨跌幅']];
+    const rowClass = (typeof chg === 'number' && Math.abs(chg) > 0.02) ? ' class="big-move"' : '';
+    return `<tr${rowClass}>` + showI.map(ci => {
     if (ci === -999) {
       const tickerName = row[colIdx['名称']] || row[colIdx['标的物']] || '';
       const price = row[colIdx['现价']];
@@ -1137,7 +1141,8 @@ function renderTable(kind) {
     if (isNum && colorCols.has(col)) { if (v > 0) cls += " pos"; else if (v < 0) cls += " neg"; }
     const display = (col === "涨跌幅" && typeof v === "number") ? fmtPct(v) : fmt(v);
     return `<td class="${cls}">${display}</td>`;
-  }).join("") + "</tr>").join("");
+  }).join("") + "</tr>";
+  }).join("");
 }
 
 // ── Export CSV ─────────────────────────────────
