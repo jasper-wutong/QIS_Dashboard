@@ -15,13 +15,16 @@ from pathlib import Path
 
 import pandas as pd
 from flask import Flask, jsonify, request, render_template
-from ticker_mapping import populate_names, resolve_sector, resolve_region, resolve_instrument_type, SECTOR_ORDER, SECTOR_ICONS
+from ticker_mapping import populate_names, resolve_sector, resolve_region, resolve_instrument_type, SECTOR_ORDER, SECTOR_ICONS, resolve_name_to_wind_ticker
 
 # 导入新闻聚合模块
 from news.news_fetcher import fetch_all_news, fetch_category_news
 
 # 导入百炼研究模块
 from ali_bailian.bailian_research import research_ticker, chat_ticker, research_batch as bailian_research_batch
+
+# 导入市场数据模块
+from market_data import fetch_market_data, clear_cache as clear_market_cache, db_stats as market_db_stats, fetch_realtime_price
 
 # -- Flask app -----------------------------------------------------------------
 app = Flask(__name__)
@@ -265,6 +268,7 @@ def refresh():
     df_qis, DATE_STR = load_data()
     DATA = process_data(df_qis, DATE_STR)
     RESEARCH_CACHE.clear()
+    clear_market_cache()
     CACHE_DATE = DATE_STR
     return jsonify({"status": "ok", "date_str": DATE_STR})
 
@@ -343,6 +347,66 @@ def api_news_category(category):
             "error": str(e),
             "data": None
         })
+
+
+# -- Market data (charts) ------------------------------------------------------
+
+@app.route("/api/market-data")
+def api_market_data():
+    """获取标的历史行情 + 技术指标 + 基本面数据。"""
+    ticker = request.args.get("ticker", "").strip()
+    name = request.args.get("name", "").strip()
+    days = int(request.args.get("days", "180"))
+
+    # 如果只传了 name 没传 ticker, 从数据中反查
+    if not ticker and name:
+        ticker = resolve_name_to_wind_ticker(
+            name,
+            df_data=DATA["other_records"],
+            columns=DATA["columns"],
+        )
+
+    if not ticker:
+        return jsonify({"ok": False, "error": "缺少 ticker 或 name 参数"}), 400
+
+    print(f"[MARKET_DATA] 获取行情: {name or ticker} (ticker={ticker}, days={days})")
+
+    try:
+        result = fetch_market_data(wind_ticker=ticker, name=name, days=days)
+        return jsonify(result)
+    except Exception as exc:
+        print(f"[MARKET_DATA] 异常: {exc}")
+        return jsonify({"ok": False, "ticker": ticker, "name": name, "error": str(exc)})
+
+
+@app.route("/api/market-db-stats")
+def api_market_db_stats():
+    """返回 SQLite 市场数据库的统计信息 (调试用)。"""
+    return jsonify(market_db_stats())
+
+
+@app.route("/api/realtime-price")
+def api_realtime_price():
+    """获取标的实时行情快照 (Wind wsq / Bloomberg ReferenceData)。"""
+    ticker = request.args.get("ticker", "").strip()
+    name = request.args.get("name", "").strip()
+
+    if not ticker and name:
+        ticker = resolve_name_to_wind_ticker(
+            name,
+            df_data=DATA["other_records"],
+            columns=DATA["columns"],
+        )
+
+    if not ticker:
+        return jsonify({"ok": False, "error": "缺少 ticker 或 name 参数"}), 400
+
+    try:
+        result = fetch_realtime_price(wind_ticker=ticker, name=name)
+        return jsonify(result)
+    except Exception as exc:
+        print(f"[REALTIME] 异常: {exc}")
+        return jsonify({"ok": False, "ticker": ticker, "name": name, "error": str(exc)})
 
 
 # -- Single-ticker research via Bailian RAG -----------------------------------

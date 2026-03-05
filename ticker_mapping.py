@@ -3,6 +3,7 @@
 只需维护合约前缀（如 AG、ES、GC），程序自动识别月份/年份变化。
 """
 import re
+from typing import Optional, List
 import pandas as pd
 
 # ── 板块分类 ─────────────────────────────────────────────────────────────────
@@ -319,3 +320,100 @@ def resolve_region(ticker_str, underlying_str=None):
             return region
 
     return "境内"  # 默认境内
+
+
+# ── 反向映射: 中文名称 → 合约前缀 ────────────────────────────────────────────
+_NAME_TO_PREFIX: dict = {v: k for k, v in FUTURES_NAME_MAP.items()}
+_NAME_TO_ETF: dict = {v: k for k, v in ETF_NAME_MAP.items()}
+_NAME_TO_SPECIAL: dict = {v: k for k, v in SPECIAL_INDEX_MAP.items()}
+
+
+def resolve_bbg_ticker(wind_ticker: str) -> Optional[str]:
+    """
+    将 Wind Ticker 映射为 Bloomberg 可识别格式。
+
+    示例:
+      ESH6 Index → ESH6 Index  (已是 Bloomberg 格式, 直接返回)
+      GCJ6 Comdty → GCJ6 Comdty
+      HSIF2602.HK → HSIF2602.HK  (需要特殊处理)
+      FDAX2603 → FDAX2603 Index (Eurex)
+
+    对于已经是 Bloomberg 格式的 ticker (含 Index / Comdty), 直接返回。
+    """
+    if pd.isna(wind_ticker):
+        return None
+    ticker = str(wind_ticker).strip()
+    if not ticker:
+        return None
+
+    # 已经是 Bloomberg 格式
+    if " Index" in ticker or " Comdty" in ticker:
+        return ticker
+
+    # 港股期货: HSIF2602.HK → 不变 (Bloomberg 实际用不同格式, 但留作扩展)
+    if ticker.endswith(".HK"):
+        return None  # 暂不支持 HK futures via Bloomberg
+
+    # Eurex: FDAX2603 → 尝试直接返回
+    m = re.match(r'^(FDAX|FGBL)\d{4}$', ticker)
+    if m:
+        return ticker
+
+    return ticker  # 对境外 ticker, 原样传递给 Bloomberg (最大兼容)
+
+
+def resolve_name_to_wind_ticker(
+    name: str,
+    df_data: Optional[list] = None,
+    columns: Optional[list] = None,
+) -> Optional[str]:
+    """
+    从中文名称反查 Wind Ticker。
+
+    优先从 df_data (dashboard 的 other_records) 中精确匹配 '名称' 列,
+    如无匹配则尝试通过 FUTURES_NAME_MAP 反向查找前缀。
+
+    Args:
+        name: 中文名称, e.g. "黄金期货", "铜期货"
+        df_data: dashboard 的 other_records (list of lists)
+        columns: 对应的列名列表
+
+    Returns:
+        Wind Ticker 字符串, 或 None
+    """
+    if not name:
+        return None
+
+    # 1) 从实际数据中精确匹配
+    if df_data and columns:
+        name_idx = None
+        ticker_idx = None
+        underlying_idx = None
+        for i, c in enumerate(columns):
+            if c == "名称":
+                name_idx = i
+            elif c == "Wind Ticker":
+                ticker_idx = i
+            elif c == "标的物":
+                underlying_idx = i
+
+        if name_idx is not None and ticker_idx is not None:
+            for row in df_data:
+                if row[name_idx] == name and row[ticker_idx]:
+                    return str(row[ticker_idx])
+
+        # 也尝试匹配标的物列
+        if underlying_idx is not None and ticker_idx is not None:
+            for row in df_data:
+                if row[underlying_idx] == name and row[ticker_idx]:
+                    return str(row[ticker_idx])
+
+    # 2) ETF 反向查找
+    if name in _NAME_TO_ETF:
+        return _NAME_TO_ETF[name]
+
+    # 3) 特殊指数
+    if name in _NAME_TO_SPECIAL:
+        return _NAME_TO_SPECIAL[name]
+
+    return None

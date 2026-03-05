@@ -308,76 +308,198 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-  /* ── Research Panel ────────────────────── */
+  /* ── Research Modal (Full-screen dual-pane) ── */
   .research-overlay {
     display: none;
     position: fixed;
     top: 0; right: 0; bottom: 0; left: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.7);
     z-index: 200;
+    backdrop-filter: blur(4px);
   }
   .research-overlay.show { display: block; }
-  .research-panel {
+  .research-modal {
+    display: none;
     position: fixed;
-    top: 0; right: 0; bottom: 0;
-    width: min(600px, 90vw);
+    top: 3vh; left: 2vw;
+    width: 96vw; height: 94vh;
     background: var(--surface);
-    border-left: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 14px;
     z-index: 201;
-    display: flex;
     flex-direction: column;
-    transform: translateX(100%);
-    transition: transform 0.3s;
-    box-shadow: -4px 0 30px rgba(0,0,0,0.4);
+    box-shadow: 0 25px 80px rgba(0,0,0,0.7);
+    overflow: hidden;
   }
-  .research-panel.show { transform: translateX(0); }
-  .research-panel-header {
-    padding: 20px 24px;
+  .research-modal.show { display: flex; }
+  .modal-header {
+    padding: 16px 24px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    background: var(--bg);
+    flex-shrink: 0;
   }
-  .research-panel-header h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--accent);
+  .modal-header h3 {
+    font-size: 16px; font-weight: 600; color: var(--accent);
   }
-  .research-panel-close {
+  .modal-close {
     background: none; border: none; color: var(--text-muted);
-    font-size: 22px; cursor: pointer; padding: 4px 8px;
+    font-size: 24px; cursor: pointer; padding: 4px 8px;
+    transition: color 0.2s;
   }
-  .research-panel-close:hover { color: var(--text); }
-  .research-panel-body {
-    flex: 1;
+  .modal-close:hover { color: var(--red); }
+  .modal-body {
+    display: flex; flex: 1; overflow: hidden;
+  }
+
+  /* ── Left Pane: Charts ─────────────────── */
+  .modal-left {
+    width: 50%; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: #0a0e17;
     overflow-y: auto;
-    padding: 24px;
-    font-size: 14px;
-    line-height: 1.8;
+  }
+  .chart-section { padding: 12px 16px 0; flex-shrink: 0; }
+  .chart-section-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(52,211,153,0.15); color: var(--green);
+    font-size: 10px; font-weight: 700; padding: 2px 8px;
+    border-radius: 4px; letter-spacing: 0.3px;
+    text-transform: uppercase; animation: livePulse 2s ease-in-out infinite;
+  }
+  .live-badge .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); animation: liveDot 1.5s ease-in-out infinite;
+  }
+  .live-price-display {
+    margin-left: auto; font-size: 13px; font-weight: 700;
+    letter-spacing: 0; text-transform: none;
+  }
+  .live-price-display .lp-price { color: var(--text); }
+  .live-price-display .lp-chg { font-size: 11px; font-weight: 600; margin-left: 6px; }
+  .live-price-display .lp-chg.pos { color: var(--green); }
+  .live-price-display .lp-chg.neg { color: var(--red); }
+  .live-price-display .lp-time { color: var(--text-muted); font-size: 10px; font-weight: 400; margin-left: 6px; }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes liveDot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.5; }
+  }
+  #mainChartContainer { width: 100%; height: 320px; }
+  #volumeChartContainer { width: 100%; height: 100px; }
+  .indicator-tabs {
+    display: flex; gap: 6px; padding: 10px 16px 4px; flex-shrink: 0;
+  }
+  .ind-tab {
+    padding: 4px 14px; border-radius: 6px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 11px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; user-select: none;
+  }
+  .ind-tab:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .ind-tab.active {
+    background: rgba(56,189,248,0.15); color: var(--accent);
+    border-color: var(--accent);
+  }
+  #indicatorChartContainer { width: 100%; height: 140px; }
+  .chart-loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 320px; color: var(--text-muted); font-size: 14px;
+  }
+
+  /* ── Fundamentals Cards ────────────────── */
+  .fundamentals-section {
+    padding: 12px 16px 16px;
+    flex-shrink: 0;
+  }
+  .fund-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .fund-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .fund-card .fc-label {
+    font-size: 10px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.4px;
+    margin-bottom: 6px;
+  }
+  .fund-card .fc-value {
+    font-size: 18px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .fund-card .fc-sub {
+    font-size: 11px; color: var(--text-muted); margin-top: 3px;
+  }
+  .fund-mini-chart { width: 100%; height: 50px; margin-top: 6px; }
+
+  /* ── Right Pane: Research ──────────────── */
+  .modal-right {
+    width: 50%; display: flex; flex-direction: column;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .research-toolbar {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  .start-research-btn {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: 8px;
+    color: #fff; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .start-research-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+  .start-research-btn:disabled { opacity: 0.5; cursor: wait; transform: none; }
+  .research-status-tag {
+    font-size: 11px; padding: 3px 12px; border-radius: 999px;
+  }
+  .research-content {
+    flex: 1; overflow-y: auto;
+    padding: 24px; font-size: 14px; line-height: 1.8;
     color: var(--text);
-    white-space: pre-wrap;
   }
-  .research-panel-body .loading-spinner {
-    text-align: center;
-    padding: 60px 0;
-    color: var(--text-muted);
-    font-size: 15px;
+  .research-content .loading-spinner {
+    text-align: center; padding: 60px 0;
+    color: var(--text-muted); font-size: 15px;
   }
-  .research-panel-body .error-msg {
-    color: var(--red);
-    padding: 20px;
-    background: rgba(248,113,113,0.1);
-    border-radius: 8px;
+  .research-content .error-msg {
+    color: var(--red); padding: 20px;
+    background: rgba(248,113,113,0.1); border-radius: 8px;
   }
-  .research-panel-body .model-tag {
+  .research-content .model-tag {
     display: inline-block;
-    background: rgba(56,189,248,0.15);
-    color: var(--accent);
-    font-size: 11px;
-    padding: 2px 10px;
-    border-radius: 999px;
-    margin-bottom: 16px;
+    background: rgba(56,189,248,0.15); color: var(--accent);
+    font-size: 11px; padding: 2px 10px;
+    border-radius: 999px; margin-bottom: 16px;
   }
+  .research-empty {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100%; text-align: center;
+    color: var(--text-muted); gap: 16px;
+  }
+  .research-empty .re-icon { font-size: 48px; opacity: 0.4; }
+  .research-empty .re-text { font-size: 14px; max-width: 280px; line-height: 1.6; }
   .research-btn {
     padding: 4px 12px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -560,6 +682,7 @@
     .summary-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
@@ -616,22 +739,65 @@
   </div>
 </div>
 
-<!-- Research Panel -->
+<!-- Research Modal (Full-screen dual-pane) -->
 <div class="research-overlay" id="researchOverlay" onclick="closeResearchPanel()"></div>
-<div class="research-panel" id="researchPanel">
-  <div class="research-panel-header">
-    <h3 id="researchPanelTitle">🔍 研究分析</h3>
-    <button class="research-panel-close" onclick="closeResearchPanel()">&times;</button>
+<div class="research-modal" id="researchModal">
+  <div class="modal-header">
+    <h3 id="researchModalTitle">🔍 研究分析</h3>
+    <button class="modal-close" onclick="closeResearchPanel()">&times;</button>
   </div>
-  <div class="research-panel-body" id="researchPanelBody">
-    <div class="loading-spinner">点击表格中的「研究」按钮加载分析...</div>
-  </div>
-  <div class="research-chat-footer disabled" id="researchChatFooter">
-    <form class="research-chat-form" onsubmit="sendChatMessage(event)">
-      <input type="text" class="research-chat-input" id="researchChatInput" 
-             placeholder="请等待研究报告加载完成..." autocomplete="off" disabled>
-      <button type="submit" class="research-chat-send" id="researchChatSend" disabled>发送</button>
-    </form>
+  <div class="modal-body">
+    <!-- Left: Charts + Indicators + Fundamentals -->
+    <div class="modal-left" id="modalLeft">
+      <div class="chart-section">
+        <div class="chart-section-title">
+          <span>📈 价格走势 (6M Daily)</span>
+          <span id="liveBadge" class="live-badge" style="display:none"><span class="live-dot"></span>LIVE</span>
+          <span id="livePriceDisplay" class="live-price-display" style="display:none"></span>
+        </div>
+        <div id="mainChartContainer"><div class="chart-loading">⏳ 加载行情数据...</div></div>
+      </div>
+      <div class="chart-section">
+        <div class="chart-section-title">📊 成交量</div>
+        <div id="volumeChartContainer"></div>
+      </div>
+      <div class="indicator-tabs" id="indicatorTabs">
+        <div class="ind-tab active" data-ind="macd" onclick="switchIndicator('macd')">MACD</div>
+        <div class="ind-tab" data-ind="rsi" onclick="switchIndicator('rsi')">RSI</div>
+        <div class="ind-tab" data-ind="bollinger" onclick="switchIndicator('bollinger')">Bollinger</div>
+      </div>
+      <div class="chart-section">
+        <div id="indicatorChartContainer"></div>
+      </div>
+      <div class="fundamentals-section">
+        <div class="chart-section-title">📋 基本面数据</div>
+        <div class="fund-cards" id="fundCards">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+    <!-- Right: Research + Chat -->
+    <div class="modal-right">
+      <div class="research-toolbar" id="researchToolbar">
+        <button class="start-research-btn" id="startResearchBtn" onclick="startResearch()">
+          🔬 开始研究
+        </button>
+        <span class="research-status-tag" id="researchStatusTag" style="display:none"></span>
+      </div>
+      <div class="research-content" id="researchContent">
+        <div class="research-empty">
+          <div class="re-icon">📊</div>
+          <div class="re-text">左侧已加载行情图表与技术指标<br>点击「🔬 开始研究」按钮调用百炼RAG知识库进行深度分析</div>
+        </div>
+      </div>
+      <div class="research-chat-footer disabled" id="researchChatFooter">
+        <form class="research-chat-form" onsubmit="sendChatMessage(event)">
+          <input type="text" class="research-chat-input" id="researchChatInput" 
+                 placeholder="请先点击「开始研究」..." autocomplete="off" disabled>
+          <button type="submit" class="research-chat-send" id="researchChatSend" disabled>发送</button>
+        </form>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1166,15 +1332,38 @@ function exportCSV(kind) {
 // ── Event Listeners ───────────────────────────
 document.getElementById("indexSearch").addEventListener("input", () => applyFilter("index"));
 
-// ── Research Panel ─────────────────────────────
+// ── Research Modal ──────────────────────────────
+let mainChart = null, volumeChart = null, indicatorChart = null;
+let mainCandleSeries = null, mainMASeries = {}, mainBollingerSeries = {};
+let volumeSeries = null;
+let currentIndicator = 'macd';
+let marketDataCache = {};  // {ticker: data}
+let _chartData = null;  // current loaded chart data
+let _realtimeInterval = null;  // real-time polling interval
+let _realtimeTicker = '';  // current ticker for real-time
+let _realtimePriceLine = null;  // price line on main chart
+
 function closeResearchPanel() {
   document.getElementById('researchOverlay').classList.remove('show');
-  document.getElementById('researchPanel').classList.remove('show');
-  // Clear chat history when panel is closed
+  document.getElementById('researchModal').classList.remove('show');
   chatHistory = [];
   currentResearch = null;
-  // Reset chat input to disabled state
   _setChatEnabled(false);
+  _chartData = null;
+  // Stop real-time polling
+  _stopRealtimePolling();
+  // Dispose charts to free memory
+  if (mainChart) { mainChart.remove(); mainChart = null; }
+  if (volumeChart) { volumeChart.remove(); volumeChart = null; }
+  if (indicatorChart) { indicatorChart.remove(); indicatorChart = null; }
+  mainCandleSeries = null; mainMASeries = {}; mainBollingerSeries = {};
+  volumeSeries = null; _realtimePriceLine = null;
+  // Restore layout (in case batch mode hid the left pane)
+  const leftPane = document.getElementById('modalLeft');
+  const rightPane = document.querySelector('.modal-right');
+  leftPane.style.display = '';
+  rightPane.style.width = '';
+  document.getElementById('researchToolbar').style.display = '';
 }
 
 function _setChatEnabled(enabled) {
@@ -1201,7 +1390,7 @@ async function sendChatMessage(event) {
   
   const input = document.getElementById('researchChatInput');
   const sendBtn = document.getElementById('researchChatSend');
-  const body = document.getElementById('researchPanelBody');
+  const body = document.getElementById('researchContent');
   const message = input.value.trim();
   
   if (!message || !currentResearch) return;
@@ -1310,36 +1499,590 @@ function _renderResearchContent(data) {
   return html;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Chart Rendering (TradingView Lightweight Charts)
+// ═══════════════════════════════════════════════════════════════
+
+const CHART_COLORS = {
+  bg: '#0a0e17',
+  grid: 'rgba(42,46,57,0.4)',
+  text: '#787b86',
+  crosshair: '#555',
+  up: '#26a69a',
+  down: '#ef5350',
+  ma5: '#f5c842',
+  ma20: '#2196f3',
+  ma60: '#e91e63',
+  bollUpper: 'rgba(33,150,243,0.4)',
+  bollLower: 'rgba(33,150,243,0.4)',
+  bollMiddle: 'rgba(33,150,243,0.7)',
+  macdLine: '#2196f3',
+  macdSignal: '#ff6d00',
+  macdHistPos: 'rgba(38,166,154,0.6)',
+  macdHistNeg: 'rgba(239,83,80,0.6)',
+  rsiLine: '#ab47bc',
+  rsiOB: 'rgba(239,83,80,0.15)',
+  rsiOS: 'rgba(38,166,154,0.15)',
+};
+
+function _createChart(container, height) {
+  return LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: height || container.clientHeight,
+    layout: {
+      background: { type: 'solid', color: CHART_COLORS.bg },
+      textColor: CHART_COLORS.text,
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: CHART_COLORS.grid },
+      horzLines: { color: CHART_COLORS.grid },
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: CHART_COLORS.grid },
+    timeScale: {
+      borderColor: CHART_COLORS.grid,
+      timeVisible: false,
+    },
+    handleScale: { axisPressedMouseMove: true },
+  });
+}
+
+function _toChartTime(dateStr) {
+  // "2025-09-05" → "2025-09-05"  (lightweight-charts accepts YYYY-MM-DD strings)
+  return dateStr;
+}
+
+function renderCharts(data) {
+  _chartData = data;
+  const ohlcv = data.ohlcv || [];
+  const indicators = data.indicators || {};
+
+  // ── Main Chart (Candlestick + MAs + Bollinger) ──
+  const mainEl = document.getElementById('mainChartContainer');
+  mainEl.innerHTML = '';
+  mainChart = _createChart(mainEl, 320);
+
+  // Candlestick
+  mainCandleSeries = mainChart.addCandlestickSeries({
+    upColor: CHART_COLORS.up, downColor: CHART_COLORS.down,
+    borderUpColor: CHART_COLORS.up, borderDownColor: CHART_COLORS.down,
+    wickUpColor: CHART_COLORS.up, wickDownColor: CHART_COLORS.down,
+  });
+  const candleData = ohlcv.filter(d => d.close != null).map(d => ({
+    time: _toChartTime(d.date),
+    open: d.open, high: d.high, low: d.low, close: d.close,
+  }));
+  mainCandleSeries.setData(candleData);
+
+  // MA Lines
+  const maColors = { ma5: CHART_COLORS.ma5, ma20: CHART_COLORS.ma20, ma60: CHART_COLORS.ma60 };
+  mainMASeries = {};
+  ['ma5', 'ma20', 'ma60'].forEach(key => {
+    if (!indicators[key]) return;
+    const series = mainChart.addLineSeries({
+      color: maColors[key], lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false,
+    });
+    const maData = indicators[key].map((v, i) =>
+      v != null && ohlcv[i] ? { time: _toChartTime(ohlcv[i].date), value: v } : null
+    ).filter(Boolean);
+    series.setData(maData);
+    mainMASeries[key] = series;
+  });
+
+  // Bollinger overlay (if active indicator is bollinger)
+  _renderBollingerOverlay(indicators);
+
+  mainChart.timeScale().fitContent();
+
+  // ── Volume Chart ──
+  const volEl = document.getElementById('volumeChartContainer');
+  volEl.innerHTML = '';
+  volumeChart = _createChart(volEl, 100);
+
+  volumeSeries = volumeChart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: '',
+  });
+  const volData = ohlcv.filter(d => d.volume != null && d.close != null).map(d => ({
+    time: _toChartTime(d.date),
+    value: d.volume,
+    color: d.close >= d.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+  }));
+  volumeSeries.setData(volData);
+  volumeChart.timeScale().fitContent();
+
+  // ── Sync crosshairs ──
+  _syncTimeScales([mainChart, volumeChart]);
+
+  // ── Indicator sub-chart ──
+  renderIndicatorChart(indicators);
+
+  // ── Fundamentals ──
+  renderFundamentals(data);
+
+  // Resize handler
+  const leftPane = document.getElementById('modalLeft');
+  const resizeObs = new ResizeObserver(() => {
+    const w = leftPane.clientWidth - 32;
+    if (mainChart) mainChart.applyOptions({ width: w });
+    if (volumeChart) volumeChart.applyOptions({ width: w });
+    if (indicatorChart) indicatorChart.applyOptions({ width: w });
+  });
+  resizeObs.observe(leftPane);
+}
+
+function _renderBollingerOverlay(indicators) {
+  // Remove old bollinger series
+  Object.values(mainBollingerSeries).forEach(s => {
+    try { mainChart.removeSeries(s); } catch(e) {}
+  });
+  mainBollingerSeries = {};
+
+  if (currentIndicator !== 'bollinger' || !indicators.bollinger) return;
+
+  const boll = indicators.bollinger;
+  const ohlcv = _chartData.ohlcv;
+  ['upper', 'middle', 'lower'].forEach(key => {
+    if (!boll[key]) return;
+    const color = key === 'middle' ? CHART_COLORS.bollMiddle :
+                  key === 'upper' ? CHART_COLORS.bollUpper : CHART_COLORS.bollLower;
+    const series = mainChart.addLineSeries({
+      color, lineWidth: 1, lineStyle: key === 'middle' ? 0 : 2,
+      priceLineVisible: false, lastValueVisible: false,
+    });
+    const lineData = boll[key].map((v, i) =>
+      v != null && ohlcv[i] ? { time: _toChartTime(ohlcv[i].date), value: v } : null
+    ).filter(Boolean);
+    series.setData(lineData);
+    mainBollingerSeries[key] = series;
+  });
+}
+
+function renderIndicatorChart(indicators) {
+  const el = document.getElementById('indicatorChartContainer');
+  el.innerHTML = '';
+  if (indicatorChart) { indicatorChart.remove(); indicatorChart = null; }
+
+  indicatorChart = _createChart(el, 140);
+  const ohlcv = _chartData.ohlcv;
+
+  if (currentIndicator === 'macd' && indicators.macd) {
+    const macd = indicators.macd;
+    // MACD histogram
+    const histSeries = indicatorChart.addHistogramSeries({
+      priceLineVisible: false, lastValueVisible: false,
+    });
+    const histData = macd.histogram.map((v, i) =>
+      v != null && ohlcv[i] ? {
+        time: _toChartTime(ohlcv[i].date), value: v,
+        color: v >= 0 ? CHART_COLORS.macdHistPos : CHART_COLORS.macdHistNeg,
+      } : null
+    ).filter(Boolean);
+    histSeries.setData(histData);
+
+    // MACD line
+    const macdLine = indicatorChart.addLineSeries({
+      color: CHART_COLORS.macdLine, lineWidth: 1.5,
+      priceLineVisible: false, lastValueVisible: false,
+    });
+    macdLine.setData(macd.macd.map((v, i) =>
+      v != null && ohlcv[i] ? { time: _toChartTime(ohlcv[i].date), value: v } : null
+    ).filter(Boolean));
+
+    // Signal line
+    const sigLine = indicatorChart.addLineSeries({
+      color: CHART_COLORS.macdSignal, lineWidth: 1.5,
+      priceLineVisible: false, lastValueVisible: false,
+    });
+    sigLine.setData(macd.signal.map((v, i) =>
+      v != null && ohlcv[i] ? { time: _toChartTime(ohlcv[i].date), value: v } : null
+    ).filter(Boolean));
+
+  } else if (currentIndicator === 'rsi' && indicators.rsi) {
+    const rsiLine = indicatorChart.addLineSeries({
+      color: CHART_COLORS.rsiLine, lineWidth: 1.5,
+      priceLineVisible: false, lastValueVisible: false,
+    });
+    rsiLine.setData(indicators.rsi.map((v, i) =>
+      v != null && ohlcv[i] ? { time: _toChartTime(ohlcv[i].date), value: v } : null
+    ).filter(Boolean));
+
+    // Overbought / Oversold horizontal lines (via baseline series workaround: use price lines)
+    rsiLine.createPriceLine({ price: 70, color: CHART_COLORS.down, lineWidth: 1, lineStyle: 2, axisLabelVisible: true });
+    rsiLine.createPriceLine({ price: 30, color: CHART_COLORS.up, lineWidth: 1, lineStyle: 2, axisLabelVisible: true });
+    rsiLine.createPriceLine({ price: 50, color: '#555', lineWidth: 1, lineStyle: 1, axisLabelVisible: false });
+
+  } else if (currentIndicator === 'bollinger') {
+    // Bollinger is overlaid on main chart; indicator pane shows bandwidth
+    const boll = indicators.bollinger;
+    if (boll && boll.upper && boll.lower && boll.middle) {
+      const bwSeries = indicatorChart.addLineSeries({
+        color: '#2196f3', lineWidth: 1.5,
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      const bwData = boll.upper.map((u, i) => {
+        if (u == null || boll.lower[i] == null || boll.middle[i] == null || !ohlcv[i]) return null;
+        const bw = boll.middle[i] !== 0 ? ((u - boll.lower[i]) / boll.middle[i]) * 100 : 0;
+        return { time: _toChartTime(ohlcv[i].date), value: Math.round(bw * 100) / 100 };
+      }).filter(Boolean);
+      bwSeries.setData(bwData);
+    }
+  }
+
+  indicatorChart.timeScale().fitContent();
+  _syncTimeScales([mainChart, volumeChart, indicatorChart]);
+}
+
+function switchIndicator(type) {
+  currentIndicator = type;
+  document.querySelectorAll('.ind-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.ind === type);
+  });
+  if (_chartData) {
+    _renderBollingerOverlay(_chartData.indicators || {});
+    renderIndicatorChart(_chartData.indicators || {});
+  }
+}
+
+function _syncTimeScales(charts) {
+  const validCharts = charts.filter(Boolean);
+  if (validCharts.length < 2) return;
+  let syncing = false;
+  validCharts.forEach((chart, idx) => {
+    chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (syncing || !range) return;
+      syncing = true;
+      validCharts.forEach((other, oi) => {
+        if (oi !== idx) other.timeScale().setVisibleLogicalRange(range);
+      });
+      syncing = false;
+    });
+  });
+}
+
+function renderFundamentals(data) {
+  const cards = document.getElementById('fundCards');
+  const fund = data.fundamentals || {};
+  const ohlcv = data.ohlcv || [];
+
+  // Latest values
+  const latest = ohlcv.length ? ohlcv[ohlcv.length - 1] : {};
+  const prev = ohlcv.length > 1 ? ohlcv[ohlcv.length - 2] : {};
+  const first = ohlcv.length ? ohlcv[0] : {};
+
+  // Price stats
+  const close = latest.close || 0;
+  const prevClose = prev.close || close;
+  const dailyChg = close - prevClose;
+  const dailyPct = prevClose ? ((dailyChg / prevClose) * 100).toFixed(2) : '0.00';
+
+  const high6m = Math.max(...ohlcv.filter(d => d.high != null).map(d => d.high));
+  const low6m = Math.min(...ohlcv.filter(d => d.low != null).map(d => d.low));
+  const retPct = first.close ? (((close - first.close) / first.close) * 100).toFixed(2) : 'N/A';
+
+  const oi = fund.open_interest || [];
+  const latestOI = oi.length ? oi[oi.length - 1].value : null;
+  const prevOI = oi.length > 1 ? oi[oi.length - 2].value : null;
+  const oiChg = (latestOI != null && prevOI != null) ? latestOI - prevOI : null;
+
+  const basis = fund.basis || [];
+  const latestBasis = basis.length ? basis[basis.length - 1].value : null;
+
+  const avgVol = ohlcv.filter(d => d.volume != null).slice(-20);
+  const avgVolVal = avgVol.length ? Math.round(avgVol.reduce((s, d) => s + d.volume, 0) / avgVol.length) : null;
+
+  const sourceLabel = data.source === 'wind' ? '万得 Wind' :
+                      data.source === 'bloomberg' ? 'Bloomberg' : data.source || '未知';
+
+  cards.innerHTML = `
+    <div class="fund-card">
+      <div class="fc-label">最新价格</div>
+      <div class="fc-value" style="color:${dailyChg >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtBig(close)}</div>
+      <div class="fc-sub">${dailyChg >= 0 ? '+' : ''}${fmtBig(dailyChg)} (${dailyPct}%)</div>
+    </div>
+    <div class="fund-card">
+      <div class="fc-label">6M 区间</div>
+      <div class="fc-value" style="color:var(--accent);font-size:14px">${fmtBig(low6m)} — ${fmtBig(high6m)}</div>
+      <div class="fc-sub">6M 涨跌: ${retPct}%</div>
+    </div>
+    <div class="fund-card">
+      <div class="fc-label">20日均量</div>
+      <div class="fc-value neutral">${avgVolVal != null ? fmtBig(avgVolVal) : 'N/A'}</div>
+      <div class="fc-sub">合约</div>
+    </div>
+    <div class="fund-card">
+      <div class="fc-label">持仓量 (OI)</div>
+      <div class="fc-value ${oiChg != null ? (oiChg >= 0 ? 'pos' : 'neg') : 'neutral'}">
+        ${latestOI != null ? fmtBig(latestOI) : 'N/A'}
+      </div>
+      <div class="fc-sub">${oiChg != null ? (oiChg >= 0 ? '+' : '') + fmtBig(oiChg) + ' vs 前日' : ''}</div>
+    </div>
+    <div class="fund-card">
+      <div class="fc-label">基差 (Basis)</div>
+      <div class="fc-value ${latestBasis != null ? (latestBasis >= 0 ? 'pos' : 'neg') : 'neutral'}">
+        ${latestBasis != null ? (latestBasis >= 0 ? '+' : '') + fmtBig(latestBasis) : 'N/A'}
+      </div>
+      <div class="fc-sub">${latestBasis != null ? (latestBasis > 0 ? '升水 (Contango)' : '贴水 (Backwardation)') : ''}</div>
+    </div>
+    <div class="fund-card">
+      <div class="fc-label">数据来源</div>
+      <div class="fc-value neutral" style="font-size:13px">${sourceLabel}</div>
+      <div class="fc-sub">${data.ticker || ''}</div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Real-time price polling
+// ═══════════════════════════════════════════════════════════════
+
+function _stopRealtimePolling() {
+  if (_realtimeInterval) {
+    clearInterval(_realtimeInterval);
+    _realtimeInterval = null;
+  }
+  _realtimeTicker = '';
+  const badge = document.getElementById('liveBadge');
+  const priceDisp = document.getElementById('livePriceDisplay');
+  if (badge) badge.style.display = 'none';
+  if (priceDisp) priceDisp.style.display = 'none';
+}
+
+function _startRealtimePolling(windTicker, name) {
+  _stopRealtimePolling();
+  _realtimeTicker = windTicker;
+  // Do first fetch immediately, then poll every 5 seconds
+  _fetchRealtimePrice(windTicker, name);
+  _realtimeInterval = setInterval(() => _fetchRealtimePrice(windTicker, name), 5000);
+}
+
+async function _fetchRealtimePrice(windTicker, name) {
+  if (!windTicker || !mainChart || !mainCandleSeries) return;
+  try {
+    const params = new URLSearchParams({ ticker: windTicker });
+    if (name) params.set('name', name);
+    const resp = await fetch('/api/realtime-price?' + params.toString());
+    const rt = await resp.json();
+    if (!rt.ok || rt.price == null) return;
+
+    // ── Update badge & header price display ──
+    const badge = document.getElementById('liveBadge');
+    const priceDisp = document.getElementById('livePriceDisplay');
+    badge.style.display = 'inline-flex';
+    priceDisp.style.display = 'inline';
+
+    const chg = rt.change != null ? rt.change : 0;
+    const chgPct = rt.change_pct != null ? rt.change_pct : 0;
+    const isUp = chg >= 0;
+    priceDisp.innerHTML = `
+      <span class="lp-price">${fmtBig(rt.price)}</span>
+      <span class="lp-chg ${isUp ? 'pos' : 'neg'}">${isUp ? '+' : ''}${fmtBig(chg)} (${chgPct >= 0 ? '+' : ''}${Number(chgPct).toFixed(2)}%)</span>
+      <span class="lp-time">${rt.time || ''}</span>
+    `;
+
+    // ── Update last candle on the chart (today's real-time bar) ──
+    const ohlcv = _chartData ? _chartData.ohlcv : [];
+    if (ohlcv.length > 0) {
+      const lastBar = ohlcv[ohlcv.length - 1];
+      const today = new Date().toISOString().slice(0, 10);
+      const lastDate = lastBar.date;
+
+      if (lastDate === today) {
+        // Update today's candle with real-time data
+        const updatedCandle = {
+          time: _toChartTime(today),
+          open: rt.open != null ? rt.open : lastBar.open,
+          high: Math.max(rt.high != null ? rt.high : lastBar.high, rt.price),
+          low: Math.min(rt.low != null ? rt.low : lastBar.low, rt.price),
+          close: rt.price,
+        };
+        mainCandleSeries.update(updatedCandle);
+
+        // Update volume bar too
+        if (volumeSeries && rt.volume != null) {
+          volumeSeries.update({
+            time: _toChartTime(today),
+            value: rt.volume,
+            color: rt.price >= (rt.open || lastBar.open) ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+          });
+        }
+      } else {
+        // Today is a new day not yet in historical data — append a new candle
+        const newCandle = {
+          time: _toChartTime(today),
+          open: rt.open != null ? rt.open : rt.price,
+          high: rt.high != null ? rt.high : rt.price,
+          low: rt.low != null ? rt.low : rt.price,
+          close: rt.price,
+        };
+        mainCandleSeries.update(newCandle);
+
+        if (volumeSeries && rt.volume != null) {
+          volumeSeries.update({
+            time: _toChartTime(today),
+            value: rt.volume,
+            color: rt.price >= (rt.open || rt.price) ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+          });
+        }
+      }
+    }
+
+    // ── Price line marker ──
+    if (_realtimePriceLine && mainCandleSeries) {
+      try { mainCandleSeries.removePriceLine(_realtimePriceLine); } catch(e) {}
+    }
+    _realtimePriceLine = mainCandleSeries.createPriceLine({
+      price: rt.price,
+      color: isUp ? '#34d399' : '#f87171',
+      lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dotted,
+      axisLabelVisible: true,
+      title: '实时',
+    });
+
+    // ── Update fundamentals panel "最新价格" card ──
+    const fundCards = document.getElementById('fundCards');
+    if (fundCards) {
+      const firstCard = fundCards.querySelector('.fund-card');
+      if (firstCard) {
+        const valEl = firstCard.querySelector('.fc-value');
+        const subEl = firstCard.querySelector('.fc-sub');
+        if (valEl) {
+          valEl.style.color = isUp ? 'var(--green)' : 'var(--red)';
+          valEl.textContent = fmtBig(rt.price);
+        }
+        if (subEl) {
+          subEl.textContent = `${isUp ? '+' : ''}${fmtBig(chg)} (${chgPct >= 0 ? '+' : ''}${Number(chgPct).toFixed(2)}%)`;
+        }
+      }
+    }
+
+  } catch (err) {
+    // Silent fail — don't break the UI for real-time updates
+    console.warn('[RT] realtime fetch failed:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  doResearch: Open modal + load chart (NO auto research)
+// ═══════════════════════════════════════════════════════════════
+
 async function doResearch(name, price, change, exposure) {
   const overlay = document.getElementById('researchOverlay');
-  const panel = document.getElementById('researchPanel');
-  const title = document.getElementById('researchPanelTitle');
-  const body = document.getElementById('researchPanelBody');
+  const modal = document.getElementById('researchModal');
+  const title = document.getElementById('researchModalTitle');
+  const content = document.getElementById('researchContent');
+  const statusTag = document.getElementById('researchStatusTag');
+  const startBtn = document.getElementById('startResearchBtn');
 
-  // Set current research context for chat
+  // Set context
   currentResearch = { name, price, change, exposure: exposure || 'NA' };
-  chatHistory = [];  // Clear chat history for new research
-  _setChatEnabled(false);  // Disable chat until research loads
+  chatHistory = [];
+  _setChatEnabled(false);
 
   const expDisp = exposure && exposure !== 'NA' ? fmtBig(Number(exposure)) : '未知';
-  title.textContent = `🔍 ${name} 研究分析（当前敞口: ${expDisp}）`;
+  title.textContent = `🔍 ${name}（敞口: ${expDisp}）`;
 
-  // Check client-side cache
+  // Reset right pane
+  startBtn.disabled = false;
+  startBtn.textContent = '🔬 开始研究';
+  statusTag.style.display = 'none';
+
+  // Check if research already cached → show it, otherwise show empty prompt
   if (researchCache[name]) {
     const data = researchCache[name];
     data.cached = true;
-    body.innerHTML = _renderResearchContent(data);
-    overlay.classList.add('show');
-    panel.classList.add('show');
-    // Enable chat for cached results
+    content.innerHTML = _renderResearchContent(data);
     chatHistory.push({ role: 'assistant', content: data.content });
     _setChatEnabled(true);
-    return;
+    statusTag.style.display = 'inline-block';
+    statusTag.textContent = '✅ 已缓存';
+    statusTag.style.background = 'rgba(251,191,36,0.15)';
+    statusTag.style.color = 'var(--yellow)';
+    startBtn.textContent = '🔄 重新研究';
+  } else {
+    content.innerHTML = `
+      <div class="research-empty">
+        <div class="re-icon">📊</div>
+        <div class="re-text">左侧已加载行情图表与技术指标<br>点击「🔬 开始研究」按钮调用百炼RAG知识库进行深度分析</div>
+      </div>`;
   }
 
-  body.innerHTML = '<div class="loading-spinner">⏳ 正在调用百炼RAG知识库深度分析，请稍候（约15-30秒）...</div>';
+  // Show modal
   overlay.classList.add('show');
-  panel.classList.add('show');
+  modal.classList.add('show');
+
+  // ── Load chart data (immediately) ──
+  _stopRealtimePolling();  // Stop any previous polling
+  document.getElementById('mainChartContainer').innerHTML = '<div class="chart-loading">⏳ 加载行情数据...</div>';
+  document.getElementById('volumeChartContainer').innerHTML = '';
+  document.getElementById('indicatorChartContainer').innerHTML = '';
+  document.getElementById('fundCards').innerHTML = '';
+
+  // Find Wind Ticker from dashboard data for this name
+  let windTicker = '';
+  const nameIdx = colIdx['名称'];
+  const tickerIdx = colIdx['Wind Ticker'];
+  const underlyingIdx = colIdx['标的物'];
+  for (const row of OTHER_DATA) {
+    if (row[nameIdx] === name || row[underlyingIdx] === name) {
+      windTicker = row[tickerIdx] || '';
+      break;
+    }
+  }
+
+  const abortCtrl = new AbortController();
+  const abortTimer = setTimeout(() => abortCtrl.abort(), 45000); // 45s timeout
+
+  try {
+    const params = new URLSearchParams({ name });
+    if (windTicker) params.set('ticker', windTicker);
+    const resp = await fetch('/api/market-data?' + params.toString(), { signal: abortCtrl.signal });
+    clearTimeout(abortTimer);
+    const mdata = await resp.json();
+
+    if (mdata.ok && mdata.ohlcv && mdata.ohlcv.length > 0) {
+      renderCharts(mdata);
+      // Start real-time price polling
+      const rtTicker = mdata.ticker || windTicker;
+      if (rtTicker) {
+        _startRealtimePolling(rtTicker, name);
+      }
+    } else {
+      document.getElementById('mainChartContainer').innerHTML =
+        `<div class="chart-loading" style="color:var(--red)">❌ ${mdata.error || '无法加载行情数据'}</div>`;
+    }
+  } catch (err) {
+    clearTimeout(abortTimer);
+    const msg = err.name === 'AbortError' ? '请求超时 (>45s)' : err.message;
+    document.getElementById('mainChartContainer').innerHTML =
+      `<div class="chart-loading" style="color:var(--red)">❌ 请求失败: ${msg}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  startResearch: User clicks button to trigger Bailian RAG
+// ═══════════════════════════════════════════════════════════════
+
+async function startResearch() {
+  if (!currentResearch) return;
+
+  const { name, price, change, exposure } = currentResearch;
+  const content = document.getElementById('researchContent');
+  const statusTag = document.getElementById('researchStatusTag');
+  const startBtn = document.getElementById('startResearchBtn');
+
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ 分析中...';
+  statusTag.style.display = 'inline-block';
+  statusTag.textContent = '分析中';
+  statusTag.style.background = 'rgba(56,189,248,0.15)';
+  statusTag.style.color = 'var(--accent)';
+
+  content.innerHTML = '<div class="loading-spinner">⏳ 正在调用百炼RAG知识库深度分析，请稍候（约15-30秒）...</div>';
+  _setChatEnabled(false);
 
   try {
     const params = new URLSearchParams({name, price, change, exposure: exposure || 'NA'});
@@ -1348,18 +2091,28 @@ async function doResearch(name, price, change, exposure) {
 
     if (data.ok && data.content) {
       researchCache[name] = data;
-      body.innerHTML = _renderResearchContent(data);
-      // Initialize chat history with the research content as context
-      chatHistory.push({ role: 'assistant', content: data.content });
-      // Enable chat after successful research
+      content.innerHTML = _renderResearchContent(data);
+      chatHistory = [{ role: 'assistant', content: data.content }];
       _setChatEnabled(true);
+      statusTag.textContent = '✅ 完成';
+      statusTag.style.background = 'rgba(52,211,153,0.15)';
+      statusTag.style.color = 'var(--green)';
     } else {
       const errMsg = data.error || '未返回研究内容';
-      body.innerHTML = `<div class="error-msg">❌ ${errMsg}</div>`;
-      if (data.content) body.innerHTML += `<pre style="margin-top:12px;font-size:12px;color:var(--text-muted)">${data.content}</pre>`;
+      content.innerHTML = `<div class="error-msg">❌ ${errMsg}</div>`;
+      if (data.content) content.innerHTML += `<pre style="margin-top:12px;font-size:12px;color:var(--text-muted)">${data.content}</pre>`;
+      statusTag.textContent = '❌ 失败';
+      statusTag.style.background = 'rgba(248,113,113,0.15)';
+      statusTag.style.color = 'var(--red)';
     }
   } catch (err) {
-    body.innerHTML = `<div class="error-msg">❌ 请求失败: ${err.message}</div>`;
+    content.innerHTML = `<div class="error-msg">❌ 请求失败: ${err.message}</div>`;
+    statusTag.textContent = '❌ 失败';
+    statusTag.style.background = 'rgba(248,113,113,0.15)';
+    statusTag.style.color = 'var(--red)';
+  } finally {
+    startBtn.disabled = false;
+    startBtn.textContent = '🔄 重新研究';
   }
 }
 
@@ -1373,9 +2126,18 @@ async function doResearchAll() {
   btn.textContent = '⏳ 研究中...';
 
   const overlay = document.getElementById('researchOverlay');
-  const panel = document.getElementById('researchPanel');
-  const title = document.getElementById('researchPanelTitle');
-  const body = document.getElementById('researchPanelBody');
+  const modal = document.getElementById('researchModal');
+  const title = document.getElementById('researchModalTitle');
+  const content = document.getElementById('researchContent');
+
+  // Hide left pane chart for batch mode
+  const leftPane = document.getElementById('modalLeft');
+  leftPane.style.display = 'none';
+  const rightPane = document.querySelector('.modal-right');
+  rightPane.style.width = '100%';
+
+  // Hide research toolbar for batch mode
+  document.getElementById('researchToolbar').style.display = 'none';
 
   // Collect all visible tickers from all sector data
   const tickers = [];
@@ -1433,10 +2195,10 @@ async function doResearchAll() {
     batches.push(tickers.slice(i, i + BATCH_SIZE));
   }
 
-  // Open panel with progress view
+  // Open modal with progress view
   title.textContent = `🔬 批量研究全部标的（共 ${tickers.length} 个）`;
   overlay.classList.add('show');
-  panel.classList.add('show');
+  modal.classList.add('show');
 
   // Build progress + result list HTML
   let completedCount = 0;
@@ -1491,7 +2253,7 @@ async function doResearchAll() {
     });
     html += '</div>';
 
-    body.innerHTML = html;
+    content.innerHTML = html;
   }
 
   renderBatchPanel();
