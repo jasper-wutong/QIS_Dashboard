@@ -22,6 +22,6 @@ if (Test-Path $python37) {
     $pythonExe = "python"
 }
 
-# Start Flask server
+# Start Flask server (use -B to skip bytecache for reliable code updates)
 Write-Host "[INFO] Starting Flask server..." -ForegroundColor Cyan
-& $pythonExe app.py
+& $pythonExe -B app.py

@@ -18,4 +18,4 @@ echo "[INFO] Virtual environment activated"
 
 # Start Flask server
 echo "[INFO] Starting Flask server..."
-python app.py
+python -B app.py

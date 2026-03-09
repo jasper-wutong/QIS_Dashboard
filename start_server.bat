@@ -21,6 +21,6 @@ if not exist "%PYTHON37%" (
 )
 
 echo [INFO] Starting Flask server...
-"%PYTHON37%" app.py
+"%PYTHON37%" -B app.py
 
 pause

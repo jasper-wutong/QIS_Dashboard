@@ -328,15 +328,150 @@ _NAME_TO_ETF: dict = {v: k for k, v in ETF_NAME_MAP.items()}
 _NAME_TO_SPECIAL: dict = {v: k for k, v in SPECIAL_INDEX_MAP.items()}
 
 
+# ── 境内期货: Wind前缀 → Bloomberg前缀对照 ────────────────────────────────────
+# 通过 Bloomberg Terminal 实测验证 (2026-03-05), 仅 Wind 前缀 == BBG 前缀的品种
+# 不需要列入此表 (如 AG, CU, HC, FU, EB, OI, SA, SF, SM, SN, SR, LH, NR, PG, RR)。
+DOMESTIC_BBG_PREFIX_OVERRIDES = {
+    # ── 上期所 (SHF) ──
+    "AU":  "XAU",    # 黄金     SHFE Gold
+    "AL":  "LAH",    # 铝       SHFE Aluminum
+    "ZN":  "ZNC",    # 锌       SHFE Zinc
+    "NI":  "NIH",    # 镍       SHFE Nickel
+    "PB":  "PLB",    # 铅       SHFE Lead
+    "RB":  "SRB",    # 螺纹钢   SHFE Steel Rebar
+    "SS":  "XSS",    # 不锈钢   SHFE Stainless Steel
+    "BU":  "BIT",    # 沥青     SHFE Bitumen
+    "RU":  "RUC",    # 橡胶     SHFE Rubber
+    "SP":  "PLP",    # 纸浆     SHFE Pulp
+    # ── 上期能源 (INE) ──
+    "SC":  "SCC",    # 原油     INE Crude Oil
+    "LU":  "ILS",    # 低硫燃料油 INE Low-Sulfur Fuel Oil
+    "BC":  "BCC",    # 国际铜   INE Bonded Copper
+    # ── 大商所 (DCE) ──
+    "I":   "SCH",    # 铁矿石   DCE Iron Ore
+    "M":   "XM",     # 豆粕     DCE Soybean Meal
+    "J":   "DCE",    # 焦炭     DCE Coke
+    "JM":  "CKC",    # 焦煤     DCE Coking Coal
+    "C":   "DCO",    # 玉米     DCE Corn
+    "A":   "XA",     # 豆一     DCE Soybean No.1
+    "B":   "XB",     # 豆二     DCE Soybean No.2
+    "Y":   "XY",     # 豆油     DCE Soybean Oil
+    "P":   "XP",     # 棕榈油   DCE Palm Olein
+    "L":   "XL",     # 聚乙烯   DCE LLDPE
+    "PP":  "PPD",    # 聚丙烯   DCE Polypropylene
+    "V":   "PVC",    # PVC      DCE PVC
+    "EG":  "DGC",    # 乙二醇   DCE Ethylene Glycol
+    "CS":  "DCS",    # 淀粉     DCE Corn Starch
+    "JD":  "DJE",    # 鸡蛋     DCE Egg
+    # ── 郑商所 (CZC) ──
+    "CF":  "COT",    # 棉花     CZCE Cotton
+    "MA":  "MTO",    # 甲醇     CZCE Methanol
+    "TA":  "XPT",    # PTA      CZCE PTA
+    "FG":  "FGL",    # 玻璃     CZCE Glass
+    "CJ":  "RDT",    # 红枣     CZCE Jujube
+    "CY":  "XCY",    # 棉纱     CZCE Cotton Yarn
+    "RM":  "RSM",    # 菜粕     CZCE Rapeseed Meal
+    "PK":  "PNT",    # 花生     CZCE Peanut
+    "PF":  "XSF",    # 短纤     CZCE Short Fiber
+    "UR":  "URA",    # 尿素     CZCE Urea
+    "ZC":  "SCP",    # 动力煤   CZCE Thermal Coal
+    # ── 中金所 (CFE) ──
+    "IC":  "CES",    # 中证500   CFFEX CSI 500
+    "IF":  "HSC",    # 沪深300   CFFEX CSI 300
+    "IH":  "SHI",    # 上证50    CFFEX SSE 50
+    "T":   "XTB",    # 10Y国债   CFFEX 10Y CGB
+    "TL":  "TYC",    # 30Y国债   CFFEX 30Y CGB
+    "TS":  "KTS",    # 2Y国债    CFFEX 2Y CGB
+    # TF (5Y国债) 暂未确认 Bloomberg前缀, 保持 Wind 原始前缀
+}
+
+# CFE股指期货使用 "Index" 后缀，其余境内品种使用 "Comdty" 后缀
+_CFE_INDEX_PREFIXES = {"IC", "IF", "IH", "IM"}
+
+# Bloomberg 月份代码
+_MONTH_TO_BBG_CODE = {
+    1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M",
+    7: "N", 8: "Q", 9: "U", 10: "V", 11: "X", 12: "Z",
+}
+
+
+def _domestic_wind_to_bbg(ticker: str) -> Optional[str]:
+    """
+    将境内期货 Wind Ticker 转换为 Bloomberg 格式。
+
+    支持两类格式:
+
+    A) **具体合约** (YYMM / YMM 日期):
+      AU2606.SHF  → AUM6 Comdty    (上期所黄金 2026年6月)
+      I2609.DCE   → FEFU6 Comdty   (大商所铁矿石 2026年9月)
+      CF2605.CZC  → CFK6  Comdty   (郑商所棉花 2026年5月)  [CZC也有3位日期格式 CF605]
+      IC2606.CFE  → ICM6  Index    (中金所中证500 2026年6月)
+
+    B) **通用/连续合约** (01-99 滚动月份号):
+      AU01.SHF  → AU1 Comdty    (黄金 近月连续)
+      AU02.SHF  → AU2 Comdty    (黄金 次近月连续)
+      I01.DCE   → FEF1 Comdty   (铁矿石 近月连续)
+      IC01.CFE  → IC1 Index     (中证500近月连续)
+
+    日期格式支持:
+      2位 NN:   AU01 → 通用合约 (01=近月, 02=次近月, ...)
+      3位 YMM:  CF605 → Y=6(2026), MM=05  (郑商所旧格式)
+      4位 YYMM: AU2606 → YY=26, MM=06
+    """
+    m = re.match(r'^([A-Za-z]+)(\d{2,6})\.(SHF|DCE|CZC|INE|CFE)$', ticker, re.IGNORECASE)
+    if not m:
+        return None
+
+    prefix = m.group(1).upper()
+    date_part = m.group(2)
+    exchange = m.group(3).upper()
+
+    # Bloomberg 前缀 (使用覆盖映射, 否则与 Wind 前缀相同)
+    bbg_prefix = DOMESTIC_BBG_PREFIX_OVERRIDES.get(prefix, prefix)
+
+    # 后缀: CFE 股指期货用 Index, 其余用 Comdty
+    suffix = "Index" if (exchange == "CFE" and prefix in _CFE_INDEX_PREFIXES) else "Comdty"
+
+    # ── 格式 B: 通用/连续合约 (2位数字 01-99) ──
+    if len(date_part) == 2:
+        month_n = int(date_part)  # 01 → 1, 02 → 2, ...
+        if month_n < 1:
+            return None
+        return "{}{} {}".format(bbg_prefix, month_n, suffix)
+
+    # ── 格式 A: 具体合约 (3-4位日期) ──
+    if len(date_part) == 4:
+        # YYMM: 2606 → year_digit=6, month=6
+        year_digit = int(date_part[0:2]) % 10
+        month = int(date_part[2:4])
+    elif len(date_part) == 3:
+        # YMM: 605 → year_digit=6, month=05
+        year_digit = int(date_part[0])
+        month = int(date_part[1:3])
+    else:
+        return None
+
+    if month < 1 or month > 12:
+        return None
+
+    month_code = _MONTH_TO_BBG_CODE.get(month)
+    if not month_code:
+        return None
+
+    return "{}{}{} {}".format(bbg_prefix, month_code, year_digit, suffix)
+
+
 def resolve_bbg_ticker(wind_ticker: str) -> Optional[str]:
     """
     将 Wind Ticker 映射为 Bloomberg 可识别格式。
 
     示例:
-      ESH6 Index → ESH6 Index  (已是 Bloomberg 格式, 直接返回)
+      AU2606.SHF  → AUM6 Comdty        (境内期货自动转换)
+      I2609.DCE   → FEFU6 Comdty       (境内期货, 使用前缀覆盖)
+      IC2606.CFE  → ICM6 Index         (股指期货用 Index 后缀)
+      ESH6 Index  → ESH6 Index         (已是 Bloomberg 格式, 直接返回)
       GCJ6 Comdty → GCJ6 Comdty
-      HSIF2602.HK → HSIF2602.HK  (需要特殊处理)
-      FDAX2603 → FDAX2603 Index (Eurex)
+      FDAX2603    → FDAX2603           (Eurex, 原样传递)
 
     对于已经是 Bloomberg 格式的 ticker (含 Index / Comdty), 直接返回。
     """
@@ -350,16 +485,20 @@ def resolve_bbg_ticker(wind_ticker: str) -> Optional[str]:
     if " Index" in ticker or " Comdty" in ticker:
         return ticker
 
-    # 港股期货: HSIF2602.HK → 不变 (Bloomberg 实际用不同格式, 但留作扩展)
-    if ticker.endswith(".HK"):
-        return None  # 暂不支持 HK futures via Bloomberg
+    # 境内期货: 含 .SHF/.DCE/.CZC/.INE/.CFE 后缀
+    if any(ticker.upper().endswith(sfx) for sfx in (".SHF", ".DCE", ".CZC", ".INE", ".CFE")):
+        return _domestic_wind_to_bbg(ticker)
 
-    # Eurex: FDAX2603 → 尝试直接返回
-    m = re.match(r'^(FDAX|FGBL)\d{4}$', ticker)
-    if m:
+    # 港股期货: HSIF2602.HK → 暂不支持 HK futures via Bloomberg
+    if ticker.endswith(".HK"):
+        return None
+
+    # Eurex: FDAX2603, FGBL2603 → 原样传递
+    if re.match(r'^(FDAX|FGBL)\d{4}$', ticker):
         return ticker
 
-    return ticker  # 对境外 ticker, 原样传递给 Bloomberg (最大兼容)
+    # 其余境外 ticker: 原样传递给 Bloomberg
+    return ticker
 
 
 def resolve_name_to_wind_ticker(

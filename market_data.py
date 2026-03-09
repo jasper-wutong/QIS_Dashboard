@@ -7,8 +7,9 @@
   - /api/refresh 时仅清空内存缓存, 不清空 SQLite (历史数据不会变)
 
 数据源路由:
-  - 境内期货 / ETF → Wind (万得 WindPy)
-  - 境外期货       → Bloomberg (blpapi)
+  - 境内标的 (.SHF/.DCE/.CZC/.INE/.CFE) → Wind (万得 WindPy, 通过 subprocess)
+  - 境外标的 (Index/Comdty/.HK/Eurex)   → Bloomberg (blpapi, 通过 subprocess)
+  - 境内合约若数据不足 (新合约), 自动回退到主力连续合约 (如 HC.SHF)
 
 技术指标 (纯 Python / pandas 计算):
   - MA 均线 (5/20/60)
@@ -418,6 +419,149 @@ def _fetch_wind(wind_ticker, start_date, end_date):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Wind 数据获取 — subprocess 方式 (支持不同 Python 版本)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import re as _re
+
+# Wind 使用系统 Python 3.7 (含 WindPy)
+_WIND_PYTHON = r"C:\Users\wutong6\AppData\Local\Programs\Python\Python37\python.exe"
+_WIND_HELPER = str(Path(__file__).resolve().parent / "wind_helper.py")
+
+# 境内期货交易所后缀
+_DOMESTIC_SUFFIXES = (".SHF", ".DCE", ".CZC", ".INE", ".CFE")
+
+
+def _is_domestic(ticker):
+    # type: (str) -> bool
+    """判断是否为境内期货 Wind Ticker。"""
+    return any(ticker.upper().endswith(sfx) for sfx in _DOMESTIC_SUFFIXES)
+
+
+def _to_continuous_ticker(wind_ticker):
+    # type: (str) -> Optional[str]
+    """
+    将具体合约 Wind Ticker 转换为主力连续合约。
+
+    HC2605.SHF  → HC.SHF
+    CF605.CZC   → CF.CZC
+    I2609.DCE   → I.DCE
+
+    对于已经是连续合约格式的 (HC01.SHF 等), 返回 None。
+    """
+    m = _re.match(r'^([A-Za-z]+)(\d{3,6})\.(SHF|DCE|CZC|INE|CFE)$', wind_ticker, _re.IGNORECASE)
+    if m:
+        prefix = m.group(1).upper()
+        date_part = m.group(2)
+        exchange = m.group(3).upper()
+        # 排除连续合约格式 (01-09 为连续合约编号)
+        if len(date_part) == 2 and int(date_part) < 13:
+            return None
+        return "{}.{}".format(prefix, exchange)
+    return None
+
+
+def _extract_json_line(stdout):
+    # type: (str) -> Optional[str]
+    """从 stdout 中提取最后一行有效 JSON (跳过 Wind Welcome 横幅等)。"""
+    for line in reversed(stdout.strip().splitlines()):
+        line = line.strip()
+        if line.startswith('{'):
+            return line
+    return None
+
+
+def _fetch_wind_subprocess(wind_ticker, start_date, end_date):
+    # type: (str, str, str) -> Dict[str, Any]
+    """
+    通过 subprocess 调用 wind_helper.py (使用系统 Python 3.7 + WindPy) 获取历史数据。
+    """
+    import subprocess
+
+    if not os.path.isfile(_WIND_PYTHON):
+        return {"ok": False, "error": "未找到 Wind Python: {}".format(_WIND_PYTHON)}
+    if not os.path.isfile(_WIND_HELPER):
+        return {"ok": False, "error": "未找到 wind_helper.py: {}".format(_WIND_HELPER)}
+
+    try:
+        result = subprocess.run(
+            [_WIND_PYTHON, _WIND_HELPER,
+             "--mode", "history",
+             "--ticker", wind_ticker,
+             "--start", start_date,
+             "--end", end_date],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            stderr = result.stderr.strip()[:500] if result.stderr else "无输出"
+            return {"ok": False, "error": "Wind helper 无输出: {}".format(stderr)}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "Wind helper 输出无 JSON: {}".format(stdout[:200])}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "Wind helper 输出无法解析为 JSON: {}".format(json_line[:200])}
+
+        return data
+
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Wind 请求超时 (>60s)"}
+    except Exception as exc:
+        return {"ok": False, "error": "Wind 调用异常: {}".format(exc)}
+
+
+def _fetch_wind_realtime_subprocess(wind_ticker):
+    # type: (str) -> Dict[str, Any]
+    """
+    通过 subprocess 调用 wind_helper.py (snapshot 模式) 获取实时行情。
+    """
+    import subprocess
+
+    if not os.path.isfile(_WIND_PYTHON):
+        return {"ok": False, "error": "未找到 Wind Python: {}".format(_WIND_PYTHON)}
+    if not os.path.isfile(_WIND_HELPER):
+        return {"ok": False, "error": "未找到 wind_helper.py: {}".format(_WIND_HELPER)}
+
+    try:
+        result = subprocess.run(
+            [_WIND_PYTHON, _WIND_HELPER,
+             "--mode", "snapshot",
+             "--ticker", wind_ticker],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            stderr = result.stderr.strip()[:500] if result.stderr else "无输出"
+            return {"ok": False, "error": "Wind snapshot 无输出: {}".format(stderr)}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "Wind snapshot 输出无 JSON: {}".format(stdout[:200])}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "Wind snapshot 输出无法解析: {}".format(json_line[:200])}
+
+        return data
+
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Wind snapshot 超时 (>15s)"}
+    except Exception as exc:
+        return {"ok": False, "error": "Wind snapshot 异常: {}".format(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Bloomberg 数据获取 (境外)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -516,10 +660,32 @@ def _determine_fetch_range(ticker, desired_start, desired_end):
 
 def _fetch_and_store(ticker, start_date, end_date, region):
     # type: (str, str, str, str) -> Dict[str, Any]
-    """从 Wind / Bloomberg 拉取数据并存入 SQLite。"""
-    if region == "境内":
-        raw = _fetch_wind(ticker, start_date, end_date)
+    """
+    拉取数据并存入 SQLite。
+
+    路由规则:
+      - 境内期货 (.SHF/.DCE/.CZC/.INE/.CFE) → Wind (subprocess)
+        - 若具体合约数据不足 (<20行), 自动回退到主力连续合约 (如 HC.SHF)
+      - 境外标的 → Bloomberg (subprocess)
+    """
+    if _is_domestic(ticker):
+        raw = _fetch_wind_subprocess(ticker, start_date, end_date)
+
+        # 如果具体合约返回数据太少 (新合约不足3个月), 尝试主力连续合约
+        ohlcv_rows = len(raw.get("ohlcv", [])) if raw.get("ok") else 0
+        if ohlcv_rows < 60:
+            continuous = _to_continuous_ticker(ticker)
+            if continuous and continuous != ticker:
+                print("[MARKET_DATA] {} 仅返回 {} 行数据, 尝试主力连续 {}".format(
+                    ticker, ohlcv_rows, continuous))
+                raw2 = _fetch_wind_subprocess(continuous, start_date, end_date)
+                if raw2.get("ok") and len(raw2.get("ohlcv", [])) > ohlcv_rows:
+                    raw = raw2
+                    raw["_continuous_fallback"] = continuous
+                    print("[MARKET_DATA] 使用主力连续 {} ({} 行)".format(
+                        continuous, len(raw.get("ohlcv", []))))
     else:
+        # 境外 → Bloomberg
         from ticker_mapping import resolve_bbg_ticker
         bbg_code = resolve_bbg_ticker(ticker)
         if not bbg_code:
@@ -595,12 +761,13 @@ def fetch_market_data(wind_ticker, name="", days=180):
 
     # ── 4. 增量拉取 ──
     fetch_range = _determine_fetch_range(wind_ticker, start_date, end_date)
-    source = _db_get_source(wind_ticker) or ("wind" if region == "境内" else "bloomberg")
+    source = _db_get_source(wind_ticker) or ("wind" if _is_domestic(wind_ticker) else "bloomberg")
 
     if fetch_range is not None:
         fetch_start, fetch_end = fetch_range
+        data_source = "wind" if _is_domestic(wind_ticker) else "bloomberg"
         print("[MARKET_DATA] 增量拉取 {} : {} ~ {} (source={})".format(
-            wind_ticker, fetch_start, fetch_end, "wind" if region == "境内" else "bloomberg"))
+            wind_ticker, fetch_start, fetch_end, data_source))
 
         raw = _fetch_and_store(wind_ticker, fetch_start, fetch_end, region)
 
@@ -788,12 +955,10 @@ def fetch_realtime_price(wind_ticker, name=""):
     # type: (str, str) -> Dict[str, Any]
     """
     获取标的实时行情快照。
-
-    境内标的 → Wind wsq
-    境外标的 → Bloomberg ReferenceDataRequest
+    - 境内标的 (.SHF/.DCE/.CZC/.INE/.CFE) → Wind (subprocess)
+    - 境外标的 → Bloomberg (subprocess)
     """
     import time as _time
-    from ticker_mapping import resolve_region
 
     # ── 短时缓存 ──
     now = _time.time()
@@ -802,11 +967,11 @@ def fetch_realtime_price(wind_ticker, name=""):
         cached["cached"] = True
         return cached
 
-    region = resolve_region(wind_ticker)
-
-    if region == "境内":
-        result = _fetch_realtime_wind(wind_ticker)
+    if _is_domestic(wind_ticker):
+        # 境内 → Wind
+        result = _fetch_wind_realtime_subprocess(wind_ticker)
     else:
+        # 境外 → Bloomberg
         from ticker_mapping import resolve_bbg_ticker
         bbg_code = resolve_bbg_ticker(wind_ticker)
         if not bbg_code:

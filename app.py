@@ -26,6 +26,9 @@ from ali_bailian.bailian_research import research_ticker, chat_ticker, research_
 # 导入市场数据模块
 from market_data import fetch_market_data, clear_cache as clear_market_cache, db_stats as market_db_stats, fetch_realtime_price
 
+# 导入大宗商品研究模块
+from commodity_research import build_research_panel, get_sector_for_ticker, get_term_structure_tickers
+
 # -- Flask app -----------------------------------------------------------------
 app = Flask(__name__)
 
@@ -271,6 +274,102 @@ def refresh():
     clear_market_cache()
     CACHE_DATE = DATE_STR
     return jsonify({"status": "ok", "date_str": DATE_STR})
+
+
+# -- Analysis routes -----------------------------------------------------------
+
+# Path setup for edslib wutong-tools (done once at module level)
+import sys as _sys
+from pathlib import Path as _Path
+_WUTONG_TOOLS = str(_Path(r"D:\edslib\wutong-tools"))
+_DATA_TOOLS    = str(_Path(r"D:\edslib\wutong-tools\data_tools"))
+for _p in [_WUTONG_TOOLS, _DATA_TOOLS]:
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
+
+@app.route("/analysis")
+def analysis_page():
+    return render_template(
+        "analysis.html",
+        date_str=DATE_STR,
+        now_time=datetime.now().strftime("%H:%M"),
+    )
+
+
+@app.route("/api/analysis/maturity-timeline")
+def api_maturity_timeline():
+    """返回 QIS book (book_id=10) trade 合约按到期日聚合的名义本金时间轴数据."""
+    import os as _os
+    from collections import defaultdict
+
+    # 绕过代理，访问内网 Hedge API
+    _proxy_keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
+    _saved = {k: _os.environ.get(k) for k in _proxy_keys}
+    _saved_no = _os.environ.get("NO_PROXY", "")
+    for k in _proxy_keys:
+        _os.environ[k] = ""
+    _os.environ["NO_PROXY"] = "*"
+    _os.environ["no_proxy"] = "*"
+
+    try:
+        from generate_fullData import HedgeAPIClient
+        date_str_today = datetime.now().strftime("%Y-%m-%d")
+        client = HedgeAPIClient(timeout=30)
+        raw = client.get_contracts(date_str_today, ["10"], verbose=False)
+        positions = client._extract_positions(raw)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e), "timeline": []})
+    finally:
+        for k, v in _saved.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+        _os.environ["NO_PROXY"] = _saved_no
+        _os.environ["no_proxy"] = _saved_no
+
+    # 仅保留 trade，且到期日 > 今天
+    from datetime import date as _date
+    today = _date.today()
+    trades = [p for p in positions if p.get("positionType") == "trade"]
+
+    by_date = defaultdict(lambda: {"total": 0.0, "underlyings": defaultdict(float)})
+    for t in trades:
+        exp_raw = (t.get("expiration") or "")[:10]
+        if not exp_raw:
+            continue
+        try:
+            exp_date = datetime.strptime(exp_raw, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if exp_date <= today:
+            continue
+        notional = abs(t.get("notional") or 0.0)
+        if notional == 0:
+            continue
+        underlying = t.get("underlying") or "Unknown"
+        by_date[exp_raw]["total"] += notional
+        by_date[exp_raw]["underlyings"][underlying] += notional
+
+    timeline = [
+        {
+            "date": d,
+            "total": by_date[d]["total"],
+            "underlyings": dict(
+                sorted(by_date[d]["underlyings"].items(), key=lambda x: -x[1])
+            ),
+        }
+        for d in sorted(by_date.keys())
+    ]
+
+    return jsonify({
+        "ok": True,
+        "date": date_str_today,
+        "trade_count": len(trades),
+        "timeline": timeline,
+    })
 
 
 # -- QIS BOOK routes -----------------------------------------------------------
@@ -555,6 +654,110 @@ def api_research_chat():
     except Exception as exc:
         print(f"[CHAT] 异常: {exc}")
         return jsonify({"ok": False, "name": name, "error": str(exc), "content": ""})
+
+
+# -- Commodity Research Routes -----------------------------------------------
+
+@app.route("/api/research-factors")
+def api_research_factors():
+    """返回品种专属研究因子面板数据（量化因子 + 关键驱动 + 综合评分）。"""
+    ticker = request.args.get("ticker", "").strip()
+    name   = request.args.get("name", "").strip()
+    sector = request.args.get("sector", "").strip() or None
+
+    if not ticker and name:
+        ticker = resolve_name_to_wind_ticker(
+            name, df_data=DATA["other_records"], columns=DATA["columns"]
+        )
+    if not ticker:
+        return jsonify({"ok": False, "error": "缺少 ticker 或 name 参数"}), 400
+
+    print(f"[RESEARCH_FACTORS] {name or ticker} (ticker={ticker})")
+    try:
+        # 先获取市场数据（OHLCV + 基本面）
+        mdata = fetch_market_data(wind_ticker=ticker, name=name, days=180)
+        ohlcv = mdata.get("ohlcv", []) if mdata.get("ok") else []
+        fundamentals = mdata.get("fundamentals", {}) if mdata.get("ok") else {}
+
+        # 自动解析板块
+        if not sector:
+            sector = get_sector_for_ticker(ticker)
+
+        panel = build_research_panel(
+            wind_ticker=ticker,
+            sector=sector,
+            ohlcv=ohlcv,
+            fundamentals=fundamentals,
+        )
+        panel["ok"] = True
+        panel["ticker"] = ticker
+        panel["name"] = name
+        return jsonify(panel)
+    except Exception as exc:
+        print(f"[RESEARCH_FACTORS] 异常: {exc}")
+        return jsonify({"ok": False, "ticker": ticker, "name": name, "error": str(exc)})
+
+
+@app.route("/api/term-structure")
+def api_term_structure():
+    """获取期货合约期限结构（前N个月合约的当前价格）。"""
+    ticker = request.args.get("ticker", "").strip()
+    name   = request.args.get("name", "").strip()
+
+    if not ticker and name:
+        ticker = resolve_name_to_wind_ticker(
+            name, df_data=DATA["other_records"], columns=DATA["columns"]
+        )
+    if not ticker:
+        return jsonify({"ok": False, "error": "缺少 ticker 参数"}), 400
+
+    ts_tickers = get_term_structure_tickers(ticker)
+    if not ts_tickers:
+        return jsonify({"ok": False, "error": f"暂无 {ticker} 的期限结构配置", "curve": []})
+
+    print(f"[TERM_STRUCTURE] {ticker} → {ts_tickers}")
+    curve_points = []
+    errors = []
+    for i, ts_ticker in enumerate(ts_tickers):
+        try:
+            rt = fetch_realtime_price(wind_ticker=ts_ticker, name="")
+            if rt.get("ok") and rt.get("price") is not None:
+                curve_points.append({
+                    "contract": ts_ticker,
+                    "month_n": i + 1,
+                    "label": f"M{i+1}",
+                    "price": rt["price"],
+                    "change": rt.get("change"),
+                    "change_pct": rt.get("change_pct"),
+                })
+            else:
+                err_msg = rt.get("error", "无数据")
+                errors.append(f"M{i+1}({ts_ticker}): {err_msg}")
+                print(f"[TERM_STRUCTURE] {ts_ticker} 无数据: {err_msg}")
+        except Exception as e:
+            errors.append(f"M{i+1}({ts_ticker}): {e}")
+            print(f"[TERM_STRUCTURE] {ts_ticker} 异常: {e}")
+            continue
+
+    # 判断数据源类型
+    is_domestic = any(t.endswith(('.SHF', '.DCE', '.CZC', '.INE', '.CFE')) for t in ts_tickers)
+    source_hint = "Wind (境内)" if is_domestic else "Bloomberg (境外)"
+
+    ok = len(curve_points) >= 2  # 至少需要2个点才能画曲线
+    return jsonify({
+        "ok": ok,
+        "ticker": ticker,
+        "curve": curve_points,
+        "count": len(curve_points),
+        "total": len(ts_tickers),
+        "source": source_hint,
+        "errors": errors[:3] if errors else [],  # 最多返回3条错误信息
+        "error": (
+            f"仅获取到 {len(curve_points)}/{len(ts_tickers)} 个合约价格。"
+            f"数据源: {source_hint}。"
+            + (f" 首个错误: {errors[0]}" if errors else "")
+        ) if not ok else None,
+    })
 
 
 # -- Entrypoint ----------------------------------------------------------------
