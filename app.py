@@ -280,12 +280,52 @@ def refresh():
 
 # Path setup for edslib wutong-tools (done once at module level)
 import sys as _sys
+import time as _time
 from pathlib import Path as _Path
 _WUTONG_TOOLS = str(_Path(r"D:\edslib\wutong-tools"))
 _DATA_TOOLS    = str(_Path(r"D:\edslib\wutong-tools\data_tools"))
 for _p in [_WUTONG_TOOLS, _DATA_TOOLS]:
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
+
+# 5-min in-memory cache so parallel front-end calls share one Hedge API fetch
+_CONTRACTS_CACHE: dict = {"data": None, "ts": 0.0}
+_CONTRACTS_CACHE_TTL = 300  # seconds
+
+
+def _fetch_qis_contracts():
+    """Fetch all QIS book-10 contracts, cached 5 min to avoid repeated Hedge API hits."""
+    import os as _os
+    now = _time.time()
+    if _CONTRACTS_CACHE["data"] is not None and (now - _CONTRACTS_CACHE["ts"]) < _CONTRACTS_CACHE_TTL:
+        return _CONTRACTS_CACHE["data"], None
+
+    _keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
+    _saved = {k: _os.environ.get(k) for k in _keys}
+    _saved_no = _os.environ.get("NO_PROXY", "")
+    for k in _keys:
+        _os.environ[k] = ""
+    _os.environ["NO_PROXY"] = "*"
+    _os.environ["no_proxy"] = "*"
+    try:
+        from generate_fullData import HedgeAPIClient
+        client = HedgeAPIClient(timeout=30)
+        raw = client.get_contracts(datetime.now().strftime("%Y-%m-%d"), ["10"], verbose=False)
+        positions = client._extract_positions(raw)
+        _CONTRACTS_CACHE["data"] = positions
+        _CONTRACTS_CACHE["ts"] = now
+        return positions, None
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return None, str(e)
+    finally:
+        for k, v in _saved.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+        _os.environ["NO_PROXY"] = _saved_no
+        _os.environ["no_proxy"] = _saved_no
 
 
 @app.route("/analysis")
@@ -299,43 +339,22 @@ def analysis_page():
 
 @app.route("/api/analysis/maturity-timeline")
 def api_maturity_timeline():
-    """返回 QIS book (book_id=10) trade 合约按到期日聚合的名义本金时间轴数据."""
-    import os as _os
+    """Per-expiry aggregation: notional, net delta, net gamma, net vega."""
     from collections import defaultdict
-
-    # 绕过代理，访问内网 Hedge API
-    _proxy_keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
-    _saved = {k: _os.environ.get(k) for k in _proxy_keys}
-    _saved_no = _os.environ.get("NO_PROXY", "")
-    for k in _proxy_keys:
-        _os.environ[k] = ""
-    _os.environ["NO_PROXY"] = "*"
-    _os.environ["no_proxy"] = "*"
-
-    try:
-        from generate_fullData import HedgeAPIClient
-        date_str_today = datetime.now().strftime("%Y-%m-%d")
-        client = HedgeAPIClient(timeout=30)
-        raw = client.get_contracts(date_str_today, ["10"], verbose=False)
-        positions = client._extract_positions(raw)
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({"ok": False, "error": str(e), "timeline": []})
-    finally:
-        for k, v in _saved.items():
-            if v is None:
-                _os.environ.pop(k, None)
-            else:
-                _os.environ[k] = v
-        _os.environ["NO_PROXY"] = _saved_no
-        _os.environ["no_proxy"] = _saved_no
-
-    # 仅保留 trade，且到期日 > 今天
     from datetime import date as _date
+
+    positions, err = _fetch_qis_contracts()
+    if err:
+        return jsonify({"ok": False, "error": err, "timeline": []})
+
     today = _date.today()
     trades = [p for p in positions if p.get("positionType") == "trade"]
 
-    by_date = defaultdict(lambda: {"total": 0.0, "underlyings": defaultdict(float)})
+    by_date = defaultdict(lambda: {
+        "total": 0.0, "delta_net": 0.0, "gamma_net": 0.0, "vega_net": 0.0,
+        "underlyings": defaultdict(float), "delta_by_u": defaultdict(float),
+    })
+
     for t in trades:
         exp_raw = (t.get("expiration") or "")[:10]
         if not exp_raw:
@@ -346,29 +365,131 @@ def api_maturity_timeline():
             continue
         if exp_date <= today:
             continue
-        notional = abs(t.get("notional") or 0.0)
-        if notional == 0:
-            continue
+        notional   = abs(t.get("notional") or 0.0)
+        delta      = t.get("delta") or 0.0
+        gamma      = t.get("gamma") or 0.0
+        vega       = t.get("vega")  or 0.0
         underlying = t.get("underlying") or "Unknown"
-        by_date[exp_raw]["total"] += notional
-        by_date[exp_raw]["underlyings"][underlying] += notional
+        if notional == 0 and delta == 0:
+            continue
+        by_date[exp_raw]["total"]      += notional
+        by_date[exp_raw]["delta_net"]  += delta
+        by_date[exp_raw]["gamma_net"]  += gamma
+        by_date[exp_raw]["vega_net"]   += vega
+        by_date[exp_raw]["underlyings"][underlying]  += notional
+        by_date[exp_raw]["delta_by_u"][underlying]   += delta
 
     timeline = [
         {
-            "date": d,
-            "total": by_date[d]["total"],
-            "underlyings": dict(
-                sorted(by_date[d]["underlyings"].items(), key=lambda x: -x[1])
-            ),
+            "date":      d,
+            "total":     by_date[d]["total"],
+            "delta_net": by_date[d]["delta_net"],
+            "gamma_net": by_date[d]["gamma_net"],
+            "vega_net":  by_date[d]["vega_net"],
+            "underlyings": dict(sorted(by_date[d]["underlyings"].items(), key=lambda x: -x[1])),
+            "delta_by_u":  dict(sorted(by_date[d]["delta_by_u"].items(),  key=lambda x: -abs(x[1]))),
         }
         for d in sorted(by_date.keys())
     ]
 
     return jsonify({
         "ok": True,
-        "date": date_str_today,
+        "date": datetime.now().strftime("%Y-%m-%d"),
         "trade_count": len(trades),
         "timeline": timeline,
+    })
+
+
+@app.route("/api/analysis/contracts-detail")
+def api_contracts_detail():
+    """Per-trade detail for bubble / scatter visualizations."""
+    from datetime import date as _date
+
+    positions, err = _fetch_qis_contracts()
+    if err:
+        return jsonify({"ok": False, "error": err, "trades": []})
+
+    today = _date.today()
+    trades_out = []
+    # collect unique underlyings with spot for selector
+    underlying_meta: dict = {}
+
+    for t in positions:
+        if t.get("positionType") != "trade":
+            continue
+        exp_raw = (t.get("expiration") or "")[:10]
+        if not exp_raw:
+            continue
+        try:
+            exp_date = datetime.strptime(exp_raw, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if exp_date <= today:
+            continue
+
+        structure  = t.get("structure") or ""
+        underlying = t.get("underlying") or "Unknown"
+        init_price = t.get("initPrice") or 0.0
+        spot       = t.get("spot") or 0.0
+        delta      = t.get("delta") or 0.0
+        notional   = abs(t.get("notional") or 0.0)
+
+        # Absolute KO barrier level
+        ko_raw = t.get("ko_prices")
+        ko_abs = (ko_raw * init_price) if (isinstance(ko_raw, (int, float)) and ko_raw > 0 and init_price > 0) else None
+
+        # Absolute KI barrier level
+        ki_raw = t.get("ki_barrier")
+        ki_abs = (ki_raw * init_price) if (isinstance(ki_raw, (int, float)) and ki_raw > 0 and init_price > 0) else None
+
+        # Y level for bubble chart (strike or barrier)
+        strike_abs = t.get("strikeAbs") or 0.0
+        y_level = None
+        y_type  = None
+        if strike_abs > 0 and structure in ("vanilla", "asian"):
+            y_level = strike_abs
+            y_type  = "strike"
+        elif ko_abs and ko_abs > 0 and structure in ("sharkfin", "snowball"):
+            y_level = ko_abs
+            y_type  = "ko_barrier"
+
+        if y_level is None:
+            continue  # skip if no meaningful price level
+
+        trades_out.append({
+            "id":          t.get("id"),
+            "underlying":  underlying,
+            "expiration":  exp_raw,
+            "structure":   structure,
+            "callPut":     t.get("callPut") or "",
+            "y_level":     y_level,
+            "y_type":      y_type,
+            "spot":        spot,
+            "initPrice":   init_price,
+            "delta":       delta,
+            "gamma":       t.get("gamma") or 0.0,
+            "vega":        t.get("vega") or 0.0,
+            "notional":    notional,
+            "ko_abs":      ko_abs,
+            "ki_abs":      ki_abs,
+            "is_barrier":  bool(t.get("is_barrier", False)),
+            "annual_coupon": t.get("annual_coupon") or 0.0,
+        })
+
+        if underlying not in underlying_meta and spot > 0:
+            underlying_meta[underlying] = {"spot": spot, "count": 0, "total_delta": 0.0}
+        if underlying in underlying_meta:
+            underlying_meta[underlying]["count"] += 1
+            underlying_meta[underlying]["total_delta"] += abs(delta)
+
+    # Sort underlyings by total delta descending for the dropdown
+    sorted_underlyings = sorted(underlying_meta.items(), key=lambda x: -x[1]["total_delta"])
+
+    return jsonify({
+        "ok":          True,
+        "trades":      trades_out,
+        "underlyings": [{"code": k, "spot": v["spot"], "count": v["count"],
+                         "total_delta": v["total_delta"]} for k, v in sorted_underlyings],
     })
 
 

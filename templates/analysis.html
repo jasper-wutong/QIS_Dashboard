@@ -1,346 +1,344 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QIS Analysis - {{ date_str }}</title>
+<title>QIS Analysis  {{ date_str }}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f172a;
-    --surface: #1e293b;
-    --surface2: #283548;
-    --border: #334155;
-    --text: #e2e8f0;
-    --text-muted: #94a3b8;
-    --accent: #38bdf8;
-    --accent2: #818cf8;
-    --green: #34d399;
-    --red: #f87171;
-    --orange: #fb923c;
-    --yellow: #fbbf24;
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #c9d1d9;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --red:     #f85149;
+    --yellow:  #d29922;
+    --purple:  #bc8cff;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-
-  /* ── Header ── */
-  .header {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 20px 40px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 100;
-    backdrop-filter: blur(12px);
-  }
-  .header h1 {
-    font-size: 22px; font-weight: 700;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  .header .date-badge {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 16px; font-size: 13px; color: var(--text-muted);
-  }
-  .header .date-badge strong { color: var(--accent); }
-  .refresh-btn {
-    padding: 7px 16px; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.2s;
-  }
-  .refresh-btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
-
-  /* ── Layout ── */
-  .container { max-width: 1800px; margin: 0 auto; padding: 28px 40px 60px; }
-
-  .section-group { margin-bottom: 40px; }
-  .section-title {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
-  }
-  .section-title h2 { font-size: 17px; font-weight: 600; }
-  .section-title .sub { font-size: 12px; color: var(--text-muted); }
-
-  /* ── Summary strip ── */
-  .summary-strip {
-    display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
-  }
-  .stat-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 22px; min-width: 160px;
-  }
-  .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-  .stat-card .value { font-size: 22px; font-weight: 700; color: var(--accent); display: inline; }
-  .stat-card .unit  { font-size: 13px; color: var(--text-muted); margin-left: 4px; }
-
-  /* ── Chart wrapper ── */
-  .chart-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 24px;
-  }
-  .chart-scroll-wrap {
-    overflow-x: auto; overflow-y: visible;
-    padding-bottom: 8px;
-  }
-  .chart-scroll-wrap::-webkit-scrollbar { height: 6px; }
-  .chart-scroll-wrap::-webkit-scrollbar-track { background: var(--surface2); border-radius: 3px; }
-  .chart-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  /* ── Loading / Error ── */
-  .loading-msg {
-    display: flex; align-items: center; justify-content: center;
-    height: 220px; color: var(--text-muted); font-size: 14px; gap: 10px;
-  }
-  .spinner {
-    width: 20px; height: 20px; border: 2px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .error-msg {
-    background: rgba(248,113,113,0.1); border: 1px solid var(--red);
-    border-radius: 8px; padding: 14px 18px; color: var(--red); font-size: 13px;
-  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Pro Display', -apple-system, sans-serif; min-height: 100vh; }
+  .nav { display: flex; align-items: center; gap: 10px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .nav-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-right: 12px; }
+  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: .82rem; text-decoration: none; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .last-update { color: var(--muted); font-size: .78rem; }
+  #loading-indicator { color: var(--yellow); font-size: .82rem; display: none; }
+  main { padding: 20px; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .section-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .section-header h2 { font-size: 1rem; font-weight: 600; }
+  .section-body { padding: 16px 20px; }
+  .stat-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-card { flex: 1; min-width: 140px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .stat-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .stat-value { font-size: 1.25rem; font-weight: 700; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.yellow { color: var(--yellow); }
+  .stat-value.purple { color: var(--purple); }
+  .chart-scroll { overflow-x: auto; overflow-y: hidden; }
+  .chart-scroll canvas { display: block; }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .controls label { font-size: .82rem; color: var(--muted); }
+  .controls select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font-size: .82rem; }
+  .legend-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 6px; font-size: .78rem; color: var(--muted); }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .error-msg { color: var(--red); background: rgba(248,81,73,.1); border: 1px solid var(--red); border-radius: 6px; padding: 10px 14px; font-size: .85rem; }
 </style>
 </head>
 <body>
-
-<div class="header">
-  <h1>🔬 QIS Analysis</h1>
-  <div class="header-right">
-    <button class="refresh-btn" onclick="window.location.href='/'">📊 Dashboard</button>
-    <button class="refresh-btn" onclick="window.location.href='/qis-book'">📊 QIS BOOK</button>
-    <button class="refresh-btn" onclick="loadTimeline()">🔄 刷新</button>
-    <div class="date-badge">Data: <strong>{{ date_str }}</strong> &nbsp;|&nbsp; {{ now_time }}</div>
+<nav class="nav">
+  <span class="nav-title">&#x1F4CA; QIS Analysis</span>
+  <a href="/" class="btn">&#x1F3E0; Dashboard</a>
+  <a href="/qis_book" class="btn">&#x1F4DA; QIS Book</a>
+  <div class="nav-right">
+    <span id="loading-indicator">&#x23F3; Loading&hellip;</span>
+    <span class="last-update">Updated: {{ now_time }}</span>
+    <button class="btn primary" onclick="reloadAll()">&#x1F504; Refresh</button>
   </div>
-</div>
-
-<div class="container">
-
-  <!-- ── Section 1: 到期名义本金时间轴 ── -->
-  <div class="section-group">
-    <div class="section-title">
-      <h2>📅 到期名义本金时间轴</h2>
-      <span class="sub">Trade 合约 · 按到期日汇总名义本金 · 仅展示未来到期</span>
+</nav>
+<main>
+  <!-- SECTION 1 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>&#x1F4C5; Maturity Timeline</h2>
+      <span style="font-size:.8rem;color:var(--muted)">Bar = Total Notional &middot; Line = Net Delta (right axis)</span>
     </div>
-
-    <!-- Summary stats -->
-    <div class="summary-strip" id="summaryStrip" style="display:none;">
-      <div class="stat-card">
-        <div class="label">Trade 合约总数</div>
-        <div class="value" id="statTradeCount">—</div>
+    <div class="section-body">
+      <div class="stat-strip">
+        <div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value accent" id="s1-trades">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Peak Notional Date</div><div class="stat-value yellow" id="s1-peak-date">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Peak Notional</div><div class="stat-value yellow" id="s1-peak-val">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Total Net Delta</div><div class="stat-value purple" id="s1-delta">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Expiry Dates</div><div class="stat-value green" id="s1-dates">&#x2014;</div></div>
       </div>
-      <div class="stat-card">
-        <div class="label">到期日数</div>
-        <div class="value" id="statDateCount">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">未来总名义本金</div>
-        <div class="value" id="statTotalNotional">—</div><span class="unit">亿</span>
-      </div>
-      <div class="stat-card">
-        <div class="label">最大单日到期</div>
-        <div class="value" id="statPeakNotional">—</div><span class="unit">亿</span>
-      </div>
-    </div>
-
-    <!-- Chart -->
-    <div class="chart-card">
-      <div id="loadingArea" class="loading-msg">
-        <div class="spinner"></div> 正在加载合约数据（首次约 5-10 秒）…
-      </div>
-      <div id="errorArea" style="display:none;"></div>
-      <div id="chartArea" style="display:none;">
-        <div class="chart-scroll-wrap">
-          <canvas id="maturityChart"></canvas>
-        </div>
-      </div>
+      <div id="s1-error" class="error-msg" style="display:none"></div>
+      <div class="chart-scroll"><canvas id="chart-timeline"></canvas></div>
     </div>
   </div>
-
-</div>
-
+  <!-- SECTION 2 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>&#x1F3AF; Strike &amp; Barrier Landscape</h2>
+      <div class="controls">
+        <label>Underlying:</label>
+        <select id="underlying-selector" onchange="renderBubble()">
+          <option value="ALL">All underlyings</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="stat-strip">
+        <div class="stat-card"><div class="stat-label">Shown Contracts</div><div class="stat-value accent" id="s2-count">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Spot Level</div><div class="stat-value green" id="s2-spot">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Max |Delta|</div><div class="stat-value red" id="s2-maxdelta">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Structures</div><div class="stat-value yellow" id="s2-structs">&#x2014;</div></div>
+      </div>
+      <div id="s2-error" class="error-msg" style="display:none"></div>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:#58a6ff"></span>Vanilla (strike)</span>
+        <span><span class="legend-dot" style="background:#f0883e"></span>Sharkfin (KO)</span>
+        <span><span class="legend-dot" style="background:#3fb950"></span>Snowball (KO)</span>
+        <span><span class="legend-dot" style="background:#bc8cff"></span>Asian (strike)</span>
+        <span style="margin-left:8px;color:var(--muted)">Bubble size = sqrt(|delta|) &middot; dashed = spot</span>
+      </div>
+      <div class="chart-scroll" style="margin-top:12px"><canvas id="chart-bubble"></canvas></div>
+    </div>
+  </div>
+  <!-- SECTION 3 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>&#x1F321; Greeks Horizon</h2>
+      <span style="font-size:.8rem;color:var(--muted)">Bar = Net Gamma (left) &middot; Line = Net Vega (right)</span>
+    </div>
+    <div class="section-body">
+      <div class="stat-strip">
+        <div class="stat-card"><div class="stat-label">Total Net Gamma</div><div class="stat-value accent" id="s3-gamma">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Total Net Vega</div><div class="stat-value purple" id="s3-vega">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Peak Gamma Date</div><div class="stat-value yellow" id="s3-peak-gamma">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Peak Vega Date</div><div class="stat-value yellow" id="s3-peak-vega">&#x2014;</div></div>
+      </div>
+      <div id="s3-error" class="error-msg" style="display:none"></div>
+      <div class="chart-scroll"><canvas id="chart-greeks"></canvas></div>
+    </div>
+  </div>
+</main>
 <script>
-let chartInstance = null;
+const COLORS = {
+  notional:'rgba(88,166,255,0.55)', notionalBorder:'rgba(88,166,255,0.9)',
+  delta:'rgba(188,140,255,0.9)',
+  gamma:'rgba(63,185,80,0.55)', gammaBorder:'rgba(63,185,80,0.9)',
+  vega:'rgba(210,153,34,0.9)',
+  vanilla:'rgba(88,166,255,0.75)', sharkfin:'rgba(240,136,62,0.75)',
+  snowball:'rgba(63,185,80,0.75)', asian:'rgba(188,140,255,0.75)',
+  spot:'rgba(248,81,73,0.85)',
+};
+function fmtM(v){ if(v===null||v===undefined||isNaN(v))return '\u2014'; const a=Math.abs(v); if(a>=1e8)return (v/1e8).toFixed(1)+'\u4ebf'; if(a>=1e4)return (v/1e4).toFixed(1)+'\u4e07'; return v.toFixed(0); }
+function fmtDate(d){ return d?d.slice(5):''; }
+let chartTimeline=null, chartBubble=null, chartGreeks=null;
+let _timelineData=null, _contractsData=null;
+let _loading=0;
+function setLoading(on){ _loading+=on?1:-1; document.getElementById('loading-indicator').style.display=_loading>0?'inline':'none'; }
 
-const PALETTE = [
-  '#38bdf8','#818cf8','#34d399','#fb923c','#f472b6',
-  '#fbbf24','#22d3ee','#a78bfa','#86efac','#fca5a5',
-  '#67e8f9','#c4b5fd','#6ee7b7','#fcd34d','#f9a8d4',
-];
-
-function fmtWan(v) {
-  const wan = v / 10000;
-  if (wan >= 10000) return (wan / 10000).toFixed(2) + ' 亿';
-  return wan.toFixed(0) + ' 万';
-}
-function fmtYi(v) {
-  return (v / 1e8).toFixed(2);
-}
-
-async function loadTimeline() {
-  document.getElementById('loadingArea').style.display = 'flex';
-  document.getElementById('errorArea').style.display  = 'none';
-  document.getElementById('chartArea').style.display  = 'none';
-  document.getElementById('summaryStrip').style.display = 'none';
-
-  let resp, data;
-  try {
-    resp = await fetch('/api/analysis/maturity-timeline');
-    data = await resp.json();
-  } catch (e) {
-    showError('网络错误: ' + e.message);
-    return;
-  }
-  if (!data.ok) {
-    showError('API 错误: ' + (data.error || '未知错误'));
-    return;
-  }
-
-  renderChart(data);
+async function loadTimeline(){
+  setLoading(true);
+  try{
+    const r=await fetch('/api/analysis/maturity-timeline');
+    const data=await r.json();
+    if(!data.ok)throw new Error(data.error||'Unknown error');
+    _timelineData=data; renderTimeline(data);
+  }catch(e){ const el=document.getElementById('s1-error'); el.textContent='\u26a0 '+e.message; el.style.display='block'; }
+  finally{ setLoading(false); }
 }
 
-function showError(msg) {
-  document.getElementById('loadingArea').style.display = 'none';
-  const el = document.getElementById('errorArea');
-  el.style.display = 'block';
-  el.innerHTML = `<div class="error-msg">⚠ ${msg}</div>`;
-}
-
-function renderChart(data) {
-  const timeline = data.timeline;
-  if (!timeline || timeline.length === 0) {
-    showError('没有找到未来到期的 trade 合约数据');
-    return;
-  }
-
-  // ── Summary stats ──
-  const totalNotional = timeline.reduce((s, d) => s + d.total, 0);
-  const peakNotional  = Math.max(...timeline.map(d => d.total));
-  document.getElementById('statTradeCount').textContent   = data.trade_count;
-  document.getElementById('statDateCount').textContent    = timeline.length;
-  document.getElementById('statTotalNotional').textContent = fmtYi(totalNotional);
-  document.getElementById('statPeakNotional').textContent  = fmtYi(peakNotional);
-  document.getElementById('summaryStrip').style.display = 'flex';
-
-  // ── Chart data ──
-  const labels = timeline.map(d => {
-    const dt = new Date(d.date + 'T00:00:00');
-    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-  });
-  const values = timeline.map(d => d.total / 1e4); // -> 万
-
-  // Canvas width: at least 44px per bar
-  const minBarW = 44;
-  const canvasW = Math.max(window.innerWidth - 160, timeline.length * minBarW);
-  const canvas  = document.getElementById('maturityChart');
-  canvas.width  = canvasW;
-  canvas.height = 400;
-
-  const ctx  = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 400);
-  grad.addColorStop(0, 'rgba(56,189,248,0.85)');
-  grad.addColorStop(1, 'rgba(129,140,248,0.55)');
-
-  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-
-  chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: '名义本金（万）',
-        data: values,
-        backgroundColor: grad,
-        borderColor: 'rgba(56,189,248,0.9)',
-        borderWidth: 1,
-        borderRadius: 4,
-        borderSkipped: false,
-      }]
-    },
-    options: {
-      responsive: false,
-      animation: { duration: 600 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1e293b',
-          borderColor: '#334155',
-          borderWidth: 1,
-          titleColor: '#38bdf8',
-          titleFont: { size: 14, weight: 'bold' },
-          bodyColor: '#e2e8f0',
-          bodyFont: { family: 'Consolas, monospace', size: 12 },
-          padding: 16,
-          cornerRadius: 8,
-          displayColors: false,
-          callbacks: {
-            title(items) {
-              const idx = items[0].dataIndex;
-              return `📅  ${timeline[idx].date}`;
-            },
-            label() { return ''; },
-            afterBody(items) {
-              const idx   = items[0].dataIndex;
-              const entry = timeline[idx];
-              const lines = [
-                `  合计名义本金：${fmtWan(entry.total)}`,
-                '  ─────────────────────────'
-              ];
-              const sorted = Object.entries(entry.underlyings)
-                .sort((a, b) => b[1] - a[1]);
-              sorted.forEach(([u, n]) => {
-                const pct = (n / entry.total * 100).toFixed(1);
-                lines.push(`  ${u.padEnd(16)} ${fmtWan(n).padStart(12)}  (${pct}%)`);
-              });
+function renderTimeline(data){
+  const tl=data.timeline; if(!tl||!tl.length)return;
+  const labels=tl.map(d=>fmtDate(d.date));
+  const notionals=tl.map(d=>d.total/1e8);
+  const deltas=tl.map(d=>d.delta_net/1e8);
+  let peakIdx=notionals.indexOf(Math.max(...notionals));
+  document.getElementById('s1-trades').textContent=data.trade_count;
+  document.getElementById('s1-peak-date').textContent=tl[peakIdx]?.date||'\u2014';
+  document.getElementById('s1-peak-val').textContent=fmtM(tl[peakIdx]?.total);
+  document.getElementById('s1-dates').textContent=tl.length;
+  document.getElementById('s1-delta').textContent=fmtM(tl.reduce((a,d)=>a+d.delta_net,0));
+  const width=Math.max(window.innerWidth-100,tl.length*40);
+  const canvas=document.getElementById('chart-timeline');
+  canvas.width=width; canvas.height=340;
+  if(chartTimeline)chartTimeline.destroy();
+  chartTimeline=new Chart(canvas,{
+    data:{labels,datasets:[
+      {type:'bar',label:'Notional (\u4ebf)',data:notionals,backgroundColor:COLORS.notional,borderColor:COLORS.notionalBorder,borderWidth:1,yAxisID:'y',order:2},
+      {type:'line',label:'Net Delta (\u4ebf)',data:deltas,borderColor:COLORS.delta,backgroundColor:'transparent',pointRadius:2,pointHoverRadius:5,borderWidth:2,tension:0.3,yAxisID:'y1',order:1},
+    ]},
+    options:{animation:false,responsive:false,interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#c9d1d9',font:{size:11}}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#58a6ff',bodyColor:'#c9d1d9',
+          callbacks:{
+            title:(items)=>tl[items[0].dataIndex].date,
+            afterBody:(items)=>{
+              const i=items[0].dataIndex; const row=tl[i]; const lines=[];
+              lines.push('\u2500\u2500 Notional by Underlying \u2500\u2500');
+              for(const[u,v]of Object.entries(row.underlyings).slice(0,5)) lines.push('  '+u+': '+fmtM(v));
+              lines.push('\u2500\u2500 Delta by Underlying \u2500\u2500');
+              for(const[u,v]of Object.entries(row.delta_by_u).slice(0,5)) lines.push('  '+u+': '+fmtM(v));
               return lines;
             }
           }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(51,65,85,0.5)' },
-          ticks: {
-            color: '#94a3b8',
-            font: { size: 11 },
-            maxRotation: 60,
-            minRotation: 45,
-          }
         },
-        y: {
-          grid: { color: 'rgba(51,65,85,0.5)' },
-          ticks: {
-            color: '#94a3b8',
-            font: { size: 11 },
-            callback(v) {
-              if (v >= 10000) return (v / 10000).toFixed(1) + ' 亿';
-              if (v >= 1000) return (v / 10000).toFixed(2) + ' 亿';
-              return v + ' 万';
-            }
-          },
-          title: {
-            display: true,
-            text: '名义本金',
-            color: '#64748b',
-            font: { size: 12 }
-          }
-        }
+      },
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:60},grid:{color:'rgba(48,54,61,0.5)'}},
+        y:{position:'left',title:{display:true,text:'Notional (\u4ebf CNY)',color:'#58a6ff',font:{size:10}},ticks:{color:'#8b949e',font:{size:9}},grid:{color:'rgba(48,54,61,0.4)'}},
+        y1:{position:'right',title:{display:true,text:'Net Delta (\u4ebf CNY)',color:'#bc8cff',font:{size:10}},ticks:{color:'#bc8cff',font:{size:9}},grid:{drawOnChartArea:false}},
       }
     }
   });
-
-  document.getElementById('loadingArea').style.display = 'none';
-  document.getElementById('chartArea').style.display   = 'block';
 }
 
-// Auto-load on page open
-loadTimeline();
+async function loadContracts(){
+  setLoading(true);
+  try{
+    const r=await fetch('/api/analysis/contracts-detail');
+    const data=await r.json();
+    if(!data.ok)throw new Error(data.error||'Unknown error');
+    _contractsData=data;
+    const sel=document.getElementById('underlying-selector');
+    while(sel.options.length>1)sel.remove(1);
+    for(const u of data.underlyings){
+      const opt=document.createElement('option');
+      opt.value=u.code;
+      opt.textContent=u.code+'  (spot '+u.spot.toFixed(0)+', \u0394 '+fmtM(u.total_delta)+')';
+      sel.appendChild(opt);
+    }
+    renderBubble();
+  }catch(e){ const el=document.getElementById('s2-error'); el.textContent='\u26a0 '+e.message; el.style.display='block'; }
+  finally{ setLoading(false); }
+}
+
+function renderBubble(){
+  if(!_contractsData)return;
+  const filterU=document.getElementById('underlying-selector').value;
+  let trades=_contractsData.trades;
+  if(filterU!=='ALL')trades=trades.filter(t=>t.underlying===filterU);
+  const allDates=[...new Set(trades.map(t=>t.expiration))].sort();
+  const dateIdx=Object.fromEntries(allDates.map((d,i)=>[d,i]));
+  const maxDelta=Math.max(...trades.map(t=>Math.abs(t.delta)),1);
+  function bR(d){ return 5+22*Math.sqrt(Math.abs(d))/Math.sqrt(maxDelta); }
+  const spots=trades.map(t=>t.spot).filter(s=>s>0);
+  const spotMin=Math.min(...spots); const spotMax=Math.max(...spots);
+  document.getElementById('s2-count').textContent=trades.length;
+  document.getElementById('s2-spot').textContent=spotMin===spotMax?spotMin.toFixed(1):spotMin.toFixed(0)+'-'+spotMax.toFixed(0);
+  document.getElementById('s2-maxdelta').textContent=fmtM(maxDelta);
+  document.getElementById('s2-structs').textContent=[...new Set(trades.map(t=>t.structure))].join(', ');
+  function buildDs(struct,color,label){
+    const items=trades.filter(t=>t.structure===struct);
+    return{label,data:items.map(t=>({x:dateIdx[t.expiration],y:t.y_level,r:bR(t.delta),_t:t})),
+      backgroundColor:color.replace('0.75','0.6'),borderColor:color.replace('0.75','0.9'),borderWidth:1};
+  }
+  const datasets=[
+    buildDs('vanilla',COLORS.vanilla,'Vanilla (strike)'),
+    buildDs('sharkfin',COLORS.sharkfin,'Sharkfin (KO)'),
+    buildDs('snowball',COLORS.snowball,'Snowball (KO)'),
+    buildDs('asian',COLORS.asian,'Asian (strike)'),
+  ].filter(d=>d.data.length>0);
+  const uniqueSpots=[...new Set(trades.map(t=>t.spot).filter(s=>s>0))];
+  for(const sp of uniqueSpots){
+    datasets.push({type:'line',label:'Spot '+sp.toFixed(0),
+      data:allDates.map((_,i)=>({x:i,y:sp})),
+      borderColor:COLORS.spot,borderDash:[6,4],borderWidth:1.5,pointRadius:0,tension:0});
+  }
+  const width=Math.max(window.innerWidth-100,allDates.length*50+80);
+  const canvas=document.getElementById('chart-bubble');
+  canvas.width=width; canvas.height=420;
+  if(chartBubble)chartBubble.destroy();
+  chartBubble=new Chart(canvas,{
+    type:'bubble',data:{datasets},
+    options:{animation:false,responsive:false,
+      plugins:{
+        legend:{labels:{color:'#c9d1d9',font:{size:11}}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#58a6ff',bodyColor:'#c9d1d9',
+          callbacks:{label(ctx){
+            const t=ctx.raw._t; if(!t)return ctx.dataset.label;
+            return[t.underlying+' '+t.structure+' '+t.callPut,'Expiry: '+t.expiration,
+              'Y-level: '+(t.y_level?.toFixed(2))+' ('+t.y_type+')','Spot: '+(t.spot?.toFixed(2))+'  Delta: '+fmtM(t.delta),
+              'Notional: '+fmtM(t.notional)+'  Vega: '+fmtM(t.vega)];
+          }}
+        },
+      },
+      scales:{
+        x:{type:'linear',min:-0.5,max:allDates.length-0.5,
+          title:{display:true,text:'Expiry Date',color:'#8b949e',font:{size:10}},
+          ticks:{color:'#8b949e',font:{size:9},stepSize:1,callback:(v)=>allDates[Math.round(v)]?fmtDate(allDates[Math.round(v)]):'' },
+          grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{title:{display:true,text:'Price Level',color:'#8b949e',font:{size:10}},ticks:{color:'#8b949e',font:{size:9}},grid:{color:'rgba(48,54,61,0.4)'}},
+      }
+    }
+  });
+}
+
+function renderGreeks(){
+  if(!_timelineData)return;
+  const tl=_timelineData.timeline; if(!tl||!tl.length)return;
+  const labels=tl.map(d=>fmtDate(d.date));
+  const gammas=tl.map(d=>d.gamma_net);
+  const vegas=tl.map(d=>d.vega_net/1e4);
+  const totalGamma=gammas.reduce((a,v)=>a+v,0);
+  const totalVega=vegas.reduce((a,v)=>a+v,0);
+  const absG=gammas.map(Math.abs), absV=vegas.map(Math.abs);
+  const pgIdx=absG.indexOf(Math.max(...absG)), pvIdx=absV.indexOf(Math.max(...absV));
+  document.getElementById('s3-gamma').textContent=fmtM(totalGamma);
+  document.getElementById('s3-vega').textContent=fmtM(totalVega*1e4);
+  document.getElementById('s3-peak-gamma').textContent=tl[pgIdx]?.date||'\u2014';
+  document.getElementById('s3-peak-vega').textContent=tl[pvIdx]?.date||'\u2014';
+  const width=Math.max(window.innerWidth-100,tl.length*40);
+  const canvas=document.getElementById('chart-greeks');
+  canvas.width=width; canvas.height=300;
+  if(chartGreeks)chartGreeks.destroy();
+  chartGreeks=new Chart(canvas,{
+    data:{labels,datasets:[
+      {type:'bar',label:'Net Gamma',data:gammas,
+        backgroundColor:gammas.map(v=>v>=0?COLORS.gamma:COLORS.notional),
+        borderColor:gammas.map(v=>v>=0?COLORS.gammaBorder:COLORS.notionalBorder),
+        borderWidth:1,yAxisID:'y',order:2},
+      {type:'line',label:'Net Vega (\u4e07)',data:vegas,borderColor:COLORS.vega,backgroundColor:'transparent',
+        pointRadius:2,pointHoverRadius:5,borderWidth:2,tension:0.3,yAxisID:'y1',order:1},
+    ]},
+    options:{animation:false,responsive:false,interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#c9d1d9',font:{size:11}}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#58a6ff',bodyColor:'#c9d1d9',
+          callbacks:{title:(items)=>tl[items[0].dataIndex].date}},
+      },
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:60},grid:{color:'rgba(48,54,61,0.5)'}},
+        y:{position:'left',title:{display:true,text:'Net Gamma',color:'#3fb950',font:{size:10}},ticks:{color:'#8b949e',font:{size:9}},grid:{color:'rgba(48,54,61,0.4)'}},
+        y1:{position:'right',title:{display:true,text:'Net Vega (\u4e07 CNY)',color:'#d29922',font:{size:10}},ticks:{color:'#d29922',font:{size:9}},grid:{drawOnChartArea:false}},
+      }
+    }
+  });
+}
+
+async function reloadAll(){
+  _timelineData=null; _contractsData=null;
+  if(chartTimeline){chartTimeline.destroy();chartTimeline=null;}
+  if(chartBubble){chartBubble.destroy();chartBubble=null;}
+  if(chartGreeks){chartGreeks.destroy();chartGreeks=null;}
+  ['s1-error','s2-error','s3-error'].forEach(id=>document.getElementById(id).style.display='none');
+  await loadTimeline(); renderGreeks();
+  await loadContracts();
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  Promise.all([loadTimeline().then(()=>renderGreeks()), loadContracts()]);
+});
 </script>
 </body>
 </html>
