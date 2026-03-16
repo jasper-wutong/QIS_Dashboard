@@ -388,6 +388,24 @@ DOMESTIC_BBG_PREFIX_OVERRIDES = {
 # CFE股指期货使用 "Index" 后缀，其余境内品种使用 "Comdty" 后缀
 _CFE_INDEX_PREFIXES = {"IC", "IF", "IH", "IM"}
 
+# ── 港股期货: Wind 前缀 → Bloomberg 前缀 ──────────────────────────────────────
+HK_BBG_PREFIX = {
+    "HHIF": "HC",    # 恒生国企指数期货 → Hang Seng China Enterprises Index
+    "HSIF": "HI",    # 恒生指数期货     → Hang Seng Index
+    "HTIF": "HCT",   # 恒生科技指数期货 → Hang Seng TECH Index
+}
+
+# ── Eurex 期货: Wind 前缀 → Bloomberg 前缀 ───────────────────────────────────
+EUREX_BBG_PREFIX = {
+    "FDAX": "GX",    # DAX 指数期货
+    "FGBL": "RX",    # 德国国债期货 (Euro-Bund)
+}
+# Eurex 后缀: 股指用 Index, 债券用 Comdty
+EUREX_BBG_SUFFIX = {
+    "FDAX": "Index",
+    "FGBL": "Comdty",
+}
+
 # Bloomberg 月份代码
 _MONTH_TO_BBG_CODE = {
     1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M",
@@ -489,12 +507,37 @@ def resolve_bbg_ticker(wind_ticker: str) -> Optional[str]:
     if any(ticker.upper().endswith(sfx) for sfx in (".SHF", ".DCE", ".CZC", ".INE", ".CFE")):
         return _domestic_wind_to_bbg(ticker)
 
-    # 港股期货: HSIF2602.HK → 暂不支持 HK futures via Bloomberg
+    # 港股期货: HHIF2603.HK → HCH6 Index, HSIF2602.HK → HIG6 Index, HTIF2602.HK → HCTG6 Index
     if ticker.endswith(".HK"):
+        m = re.match(r'^([A-Za-z]+)(\d{4})\.HK$', ticker)
+        if m:
+            prefix = m.group(1).upper()
+            date_part = m.group(2)
+            bbg_prefix = HK_BBG_PREFIX.get(prefix)
+            if bbg_prefix and len(date_part) == 4:
+                year_digit = int(date_part[0:2]) % 10
+                month = int(date_part[2:4])
+                if 1 <= month <= 12:
+                    month_code = _MONTH_TO_BBG_CODE.get(month)
+                    if month_code:
+                        return "{}{}{} Index".format(bbg_prefix, month_code, year_digit)
         return None
 
-    # Eurex: FDAX2603, FGBL2603 → 原样传递
-    if re.match(r'^(FDAX|FGBL)\d{4}$', ticker):
+    # Eurex: FDAX2603 → GXH6 Index, FGBL2603 → RXH6 Comdty
+    m = re.match(r'^([A-Za-z]{2,})(\d{4})$', ticker)
+    if m:
+        prefix = m.group(1).upper()
+        date_part = m.group(2)
+        bbg_prefix = EUREX_BBG_PREFIX.get(prefix)
+        if bbg_prefix and len(date_part) == 4:
+            year_digit = int(date_part[0:2]) % 10
+            month = int(date_part[2:4])
+            if 1 <= month <= 12:
+                month_code = _MONTH_TO_BBG_CODE.get(month)
+                suffix = EUREX_BBG_SUFFIX.get(prefix, "Index")
+                if month_code:
+                    return "{}{}{} {}".format(bbg_prefix, month_code, year_digit, suffix)
+        # 无法映射的 Eurex ticker 原样传递
         return ticker
 
     # 其余境外 ticker: 原样传递给 Bloomberg

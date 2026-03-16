@@ -493,6 +493,206 @@ def api_contracts_detail():
     })
 
 
+# -- Cross Gamma API -----------------------------------------------------------
+
+# BBG ticker → friendly name mapping (for cross gamma data)
+_CG_SHORT_NAMES = {
+    "000688\u00b7SH": "科创50 ETF",
+    "ACK26 Comdty": "铝 ACK26",
+    "AEK26 Comdty": "铝 AEK26",
+    "AUAM26 Comdty": "黄金 AU",
+    "COK6 Comdty": "布油 COK6",
+    "COM6 Comdty": "布油 COM6",
+    "CUK26 Comdty": "铜 CU",
+    "DMH6 Index": "DAX Mini",
+    "FFDH26 Index": "FTSE",
+    "IFBH26 Index": "沪深300 IF",
+    "NQH6 Index": "纳指 NQ",
+    "SZ399006 Index": "创业板指",
+    "TFCM26 Comdty": "国债 TFC",
+    "TFTM26 Comdty": "国债 TFT",
+    "TYM6 Comdty": "美债 TY",
+}
+
+# BBG ticker → Wind ticker for spot price fetching
+_CG_BBG_TO_WIND = {
+    "000688\u00b7SH": "588000.SH",        # 科创50 ETF
+    "ACK26 Comdty": "AL2605.SHF",         # 铝
+    "AEK26 Comdty": "AL2611.SHF",         # 铝 (far month)
+    "AUAM26 Comdty": "AU2606.SHF",        # 黄金
+    "COK6 Comdty": "COK6 Comdty",         # ICE Brent (Bloomberg)
+    "COM6 Comdty": "COM6 Comdty",         # ICE Brent (Bloomberg)
+    "CUK26 Comdty": "CU2605.SHF",         # 铜
+    "DMH6 Index": "DMH6 Index",           # DAX Mini (Bloomberg)
+    "FFDH26 Index": "FFDH26 Index",       # FTSE (Bloomberg)
+    "IFBH26 Index": "IF2603.CFE",         # 沪深300 IF
+    "NQH6 Index": "NQH6 Index",           # 纳指 NQ (Bloomberg)
+    "SZ399006 Index": "399006.SZ",        # 创业板指
+    "TFCM26 Comdty": "TF2606.CFE",        # 国债期货 TF
+    "TFTM26 Comdty": "TF2609.CFE",        # 国债期货 TF (far month)
+    "TYM6 Comdty": "TYM6 Comdty",         # 美债 (Bloomberg)
+}
+
+
+def _parse_cross_gamma_data():
+    """Parse cross_gamma_data.txt and return structured output."""
+    import re as _re
+    cg_file = Path(__file__).resolve().parent / "cross_gamma" / "cross_gamma_data.txt"
+    if not cg_file.exists():
+        return None, "cross_gamma_data.txt not found"
+
+    raw = cg_file.read_text(encoding="utf-8")
+    raw = _re.sub(r'/\*\*.*?\*/', '', raw, flags=_re.DOTALL).strip()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return None, f"JSON parse error: {e}"
+
+    return data, None
+
+
+def _cg_sort_key(t):
+    if "Index" in t:
+        return (0, t)
+    if "Comdty" in t:
+        return (1, t)
+    return (2, t)
+
+
+@app.route("/api/analysis/cross-gamma")
+def api_cross_gamma():
+    """Cross Gamma matrix + cash gamma (with spot prices)."""
+    data, err = _parse_cross_gamma_data()
+    if err:
+        return jsonify({"ok": False, "error": err})
+
+    vo = data["valuation_output"]
+    tv = vo.get("tv", 0)
+    trade_id = data.get("trade_id", "")
+    timestamp = data.get("data_timestamp", "")[:10]
+
+    # Collect tickers (excluding basket ticker TLMAT3C)
+    tickers_set = set()
+    for k in vo:
+        if k.startswith("cross_gamma[") and not k.startswith("cross_gammaN"):
+            pair = k.replace("cross_gamma[", "").rstrip("]")
+            if "," in pair:
+                a, b = pair.split(",")
+                tickers_set.add(a.strip())
+                tickers_set.add(b.strip())
+
+    tickers = sorted(tickers_set, key=_cg_sort_key)
+    n = len(tickers)
+    idx_map = {t: i for i, t in enumerate(tickers)}
+    labels = [_CG_SHORT_NAMES.get(t, t) for t in tickers]
+
+    # Build pct gamma matrix
+    pct_matrix = [[0.0] * n for _ in range(n)]
+    for i, t in enumerate(tickers):
+        pct_matrix[i][i] = vo.get(f"gamma[{t}]", 0)
+    for k, v in vo.items():
+        if not k.startswith("cross_gamma[") or k.startswith("cross_gammaN"):
+            continue
+        inner = k[12:-1]
+        if "," not in inner:
+            continue
+        a, b = [x.strip() for x in inner.split(",")]
+        if a in idx_map and b in idx_map:
+            i, j = idx_map[a], idx_map[b]
+            pct_matrix[i][j] = v
+            pct_matrix[j][i] = v
+
+    # Delta and gamma vectors
+    deltas = [vo.get(f"delta[{t}]", 0) for t in tickers]
+    gammas = [vo.get(f"gamma[{t}]", 0) for t in tickers]
+
+    # Fetch spot prices in parallel (HMC/Wind/Bloomberg can be slow)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    spots = {}
+    spot_errors = []
+
+    def _fetch_one_spot(bbg_t):
+        """Return (bbg_t, price_or_None, error_or_None)."""
+        wind_t = _CG_BBG_TO_WIND.get(bbg_t, bbg_t)
+        try:
+            rt = fetch_realtime_price(wind_ticker=wind_t, name="")
+            if rt.get("ok") and rt.get("price"):
+                return bbg_t, float(rt["price"]), None
+            # Fallback: try fetch_market_data for latest close
+            try:
+                md = fetch_market_data(wind_ticker=wind_t, name="", days=5)
+                if md.get("ok") and md.get("ohlcv"):
+                    close_val = md["ohlcv"][-1].get("close")
+                    if close_val is not None:
+                        return bbg_t, float(close_val), None
+                return bbg_t, None, f"{bbg_t}: no price"
+            except Exception:
+                return bbg_t, None, f"{bbg_t}: market data fallback failed"
+        except Exception as e:
+            return bbg_t, None, f"{bbg_t}: {e}"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_fetch_one_spot, t): t for t in tickers}
+        for fut in as_completed(futures, timeout=60):
+            try:
+                bbg_t, price, err = fut.result(timeout=30)
+                if price is not None:
+                    spots[bbg_t] = price
+                elif err:
+                    spot_errors.append(err)
+            except Exception as e:
+                spot_errors.append(f"{futures[fut]}: timeout/error {e}")
+
+    print(f"[CROSS_GAMMA] Spot prices fetched: {len(spots)}/{n}, errors: {spot_errors[:3]}")
+
+    # Build cash gamma matrix: CashGamma[i,j] = pct_gamma[i,j] * TV * S_i * S_j / 10000
+    cash_matrix = [[0.0] * n for _ in range(n)]
+    spot_list = [spots.get(t, 0) for t in tickers]
+    has_cash = len(spots) > 0
+    for i in range(n):
+        for j in range(n):
+            si, sj = spot_list[i], spot_list[j]
+            if si > 0 and sj > 0 and tv > 0:
+                cash_matrix[i][j] = pct_matrix[i][j] * tv * si * sj / 10000.0
+
+    # Top cross gamma pairs
+    pairs = []
+    for k in vo:
+        if not k.startswith("cross_gamma[") or k.startswith("cross_gammaN"):
+            continue
+        inner = k[12:-1]
+        if "," not in inner:
+            continue
+        a, b = [x.strip() for x in inner.split(",")]
+        la = _CG_SHORT_NAMES.get(a, a)
+        lb = _CG_SHORT_NAMES.get(b, b)
+        v = vo[k]
+        # cash value
+        sa, sb = spots.get(a, 0), spots.get(b, 0)
+        cv = v * tv * sa * sb / 10000.0 if (sa > 0 and sb > 0 and tv > 0) else 0
+        pairs.append({"a": la, "b": lb, "pct_gamma": v, "cash_gamma": cv})
+    pairs.sort(key=lambda x: -abs(x["pct_gamma"]))
+
+    return jsonify({
+        "ok": True,
+        "trade_id": trade_id,
+        "timestamp": timestamp,
+        "tv": tv,
+        "tickers": tickers,
+        "labels": labels,
+        "pct_matrix": pct_matrix,
+        "cash_matrix": cash_matrix,
+        "has_cash": has_cash,
+        "spots": {_CG_SHORT_NAMES.get(k, k): v for k, v in spots.items()},
+        "spot_list": spot_list,
+        "deltas": deltas,
+        "gammas": gammas,
+        "top_pairs": pairs[:20],
+        "spot_errors": spot_errors[:5],
+    })
+
+
 # -- QIS BOOK routes -----------------------------------------------------------
 
 @app.route("/qis-book")
@@ -514,6 +714,382 @@ def api_book_data():
         "book_summaries": DATA["book_summaries"],
         "date_str": DATE_STR,
     })
+
+
+# -- QIS Index History ---------------------------------------------------------
+
+_QIS_INDEX_CACHE = {}  # {name: result}
+
+
+def _fetch_qis_index_from_hmc(index_name, start_date, end_date):
+    """尝试从 HMC 获取 QIS 指数历史数据。"""
+    _HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_helper.py")
+    _VENV_PY = str(Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe")
+
+    if not os.path.isfile(_VENV_PY) or not os.path.isfile(_HMC_HELPER):
+        return None
+
+    import json as _json
+
+    env = os.environ.copy()
+    for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+              "grpc_proxy", "GRPC_PROXY"):
+        env.pop(k, None)
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
+
+    start_ddb = start_date.replace("-", ".")
+    end_ddb = end_date.replace("-", ".")
+
+    # 尝试多种 SEC_ID 格式
+    candidates = [
+        index_name.upper() + ".WI",   # e.g. ARES2PRO.WI
+        index_name.upper(),            # e.g. ARES2PRO
+    ]
+
+    # 尝试多张表 (table_name, date_col)
+    tables = [
+        ("dfs://HQUOT_CENTER_EOD", "CH_INDEX_DAY_QUOT", "TRADE_DT"),
+        ("dfs://HQUOT_CENTER_EOD", "FUT_DAY_QUOT",       "TRAN_DATE"),
+    ]
+
+    for db, table, date_col in tables:
+        for sec_id in candidates:
+            sql = (
+                "select {date_col}, OPEN_PRC, HIGH_PRC, LOW_PRC, CLOSE_PRC, TX_QTY "
+                "from loadTable('{db}', '{table}') "
+                "where {date_col} >= {start} and {date_col} <= {end} and SEC_ID = '{sec_id}' "
+                "order by {date_col} asc"
+            ).format(db=db, table=table, date_col=date_col, start=start_ddb, end=end_ddb, sec_id=sec_id)
+
+            try:
+                result = subprocess.run(
+                    [_VENV_PY, _HMC_HELPER, "--mode", "query", "--sql", sql],
+                    capture_output=True, text=True, timeout=60, env=env,
+                )
+            except Exception:
+                continue
+
+            stdout = result.stdout.strip()
+            if not stdout:
+                continue
+
+            # 提取最后一行 JSON
+            for line in reversed(stdout.split("\n")):
+                line = line.strip()
+                if line.startswith("{"):
+                    try:
+                        data = _json.loads(line)
+                    except ValueError:
+                        continue
+                    if data.get("ok") and data.get("data") and len(data["data"]) > 5:
+                        ohlcv = []
+                        for row in data["data"]:
+                            date_raw = row.get(date_col)  # TRADE_DT or TRAN_DATE
+                            date_str = str(date_raw)[:10] if date_raw else None
+                            close_val = row.get("CLOSE_PRC")
+                            if not date_str or close_val is None:
+                                continue
+                            ohlcv.append({
+                                "date": date_str,
+                                "open": row.get("OPEN_PRC"),
+                                "high": row.get("HIGH_PRC"),
+                                "low": row.get("LOW_PRC"),
+                                "close": close_val,
+                                "volume": row.get("TX_QTY"),
+                            })
+                        if ohlcv:
+                            print(f"[QIS_INDEX] HMC 找到 {index_name} → {sec_id} ({table}): {len(ohlcv)} 条")
+                            return {"ok": True, "source": "hmc", "ohlcv": ohlcv, "sec_id": sec_id}
+                    break
+
+    return None
+
+
+def _fetch_qis_index_from_wind(index_name, start_date, end_date):
+    """尝试从 Wind 获取 QIS 指数历史数据。"""
+    _WIND_PY = r"C:\Users\wutong6\AppData\Local\Programs\Python\Python37\python.exe"
+    _WIND_HELPER = str(Path(__file__).resolve().parent / "wind_helper.py")
+
+    if not os.path.isfile(_WIND_PY) or not os.path.isfile(_WIND_HELPER):
+        return None
+
+    import json as _json
+
+    # 尝试多种 Wind ticker 格式
+    candidates = [
+        index_name.upper() + ".WI",   # 万得自定义指数
+        index_name.upper(),
+    ]
+
+    for ticker in candidates:
+        try:
+            result = subprocess.run(
+                [_WIND_PY, _WIND_HELPER,
+                 "--mode", "history",
+                 "--ticker", ticker,
+                 "--start", start_date,
+                 "--end", end_date],
+                capture_output=True, text=True, timeout=60,
+            )
+        except Exception:
+            continue
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            continue
+
+        for line in reversed(stdout.split("\n")):
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    data = _json.loads(line)
+                except ValueError:
+                    continue
+                if data.get("ok") and data.get("ohlcv") and len(data["ohlcv"]) > 5:
+                    print(f"[QIS_INDEX] Wind 找到 {index_name} → {ticker}: {len(data['ohlcv'])} 条")
+                    return {"ok": True, "source": "wind", "ohlcv": data["ohlcv"], "ticker": ticker}
+                break
+
+    return None
+
+
+def _compute_index_analytics(ohlcv):
+    """计算 QIS 指数分析指标。"""
+    import numpy as np
+    from datetime import datetime as _dt, timedelta as _td
+
+    if not ohlcv or len(ohlcv) < 2:
+        return {}
+
+    df = pd.DataFrame(ohlcv)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["close"])
+
+    if len(df) < 2:
+        return {}
+
+    close = df["close"].values
+    dates = df["date"].values
+    latest_close = close[-1]
+    latest_date = pd.Timestamp(dates[-1])
+    today = pd.Timestamp(_dt.today())
+
+    # ── 涨跌幅计算 ──
+    def pct_change_from_date(target_date):
+        mask = df["date"] <= target_date
+        if mask.any():
+            ref = df.loc[mask, "close"].iloc[-1]
+            return float((latest_close - ref) / ref) if ref != 0 else None
+        return None
+
+    def pct_change_last_n_days(n):
+        target = latest_date - pd.Timedelta(days=n)
+        return pct_change_from_date(target)
+
+    analytics = {}
+
+    # 近期涨跌幅
+    chg_1d = float((close[-1] - close[-2]) / close[-2]) if len(close) >= 2 and close[-2] != 0 else None
+    analytics["chg_1d"] = chg_1d
+    analytics["chg_1w"] = pct_change_last_n_days(7)
+    analytics["chg_1m"] = pct_change_last_n_days(30)
+    analytics["chg_3m"] = pct_change_last_n_days(90)
+    analytics["chg_6m"] = pct_change_last_n_days(180)
+    analytics["chg_1y"] = pct_change_last_n_days(365)
+    analytics["chg_3y"] = pct_change_last_n_days(365 * 3)
+    analytics["chg_ytd"] = pct_change_from_date(pd.Timestamp(_dt(latest_date.year, 1, 1)))
+
+    # 成立以来涨跌幅
+    if close[0] != 0:
+        analytics["chg_inception"] = float((latest_close - close[0]) / close[0])
+    else:
+        analytics["chg_inception"] = None
+
+    # ── 最新价 / 最高 / 最低 ──
+    analytics["latest_close"] = float(latest_close)
+    analytics["latest_date"] = str(latest_date.date())
+    analytics["first_date"] = str(pd.Timestamp(dates[0]).date())
+    analytics["all_time_high"] = float(np.nanmax(close))
+    analytics["all_time_low"] = float(np.nanmin(close))
+
+    # 距离最高点回撤
+    if analytics["all_time_high"] != 0:
+        analytics["drawdown_from_ath"] = float((latest_close - analytics["all_time_high"]) / analytics["all_time_high"])
+    else:
+        analytics["drawdown_from_ath"] = None
+
+    # ── 最大回撤 ──
+    cummax = np.maximum.accumulate(close)
+    drawdowns = (close - cummax) / cummax
+    analytics["max_drawdown"] = float(np.nanmin(drawdowns))
+
+    # 最大回撤的日期区间
+    dd_end_idx = int(np.nanargmin(drawdowns))
+    dd_start_idx = int(np.nanargmax(close[:dd_end_idx + 1])) if dd_end_idx > 0 else 0
+    analytics["max_dd_start"] = str(pd.Timestamp(dates[dd_start_idx]).date())
+    analytics["max_dd_end"] = str(pd.Timestamp(dates[dd_end_idx]).date())
+
+    # ── 年化收益率 ──
+    total_days = (pd.Timestamp(dates[-1]) - pd.Timestamp(dates[0])).days
+    if total_days > 0 and close[0] > 0:
+        total_return = latest_close / close[0]
+        years = total_days / 365.25
+        analytics["annualized_return"] = float(total_return ** (1 / years) - 1) if years > 0 else None
+    else:
+        analytics["annualized_return"] = None
+
+    # ── 年化波动率 ──
+    daily_returns = np.diff(close) / close[:-1]
+    daily_returns = daily_returns[np.isfinite(daily_returns)]
+    if len(daily_returns) > 10:
+        analytics["annualized_vol"] = float(np.std(daily_returns) * np.sqrt(252))
+        analytics["daily_vol"] = float(np.std(daily_returns))
+    else:
+        analytics["annualized_vol"] = None
+        analytics["daily_vol"] = None
+
+    # ── Sharpe Ratio (假设无风险利率 2.5%) ──
+    rf = 0.025
+    if analytics.get("annualized_return") is not None and analytics.get("annualized_vol") and analytics["annualized_vol"] > 0:
+        analytics["sharpe_ratio"] = float((analytics["annualized_return"] - rf) / analytics["annualized_vol"])
+    else:
+        analytics["sharpe_ratio"] = None
+
+    # ── Calmar Ratio (年化收益 / 最大回撤) ──
+    if analytics.get("annualized_return") is not None and analytics["max_drawdown"] < 0:
+        analytics["calmar_ratio"] = float(analytics["annualized_return"] / abs(analytics["max_drawdown"]))
+    else:
+        analytics["calmar_ratio"] = None
+
+    # ── 近1年最大回撤 ──
+    mask_1y = df["date"] >= (latest_date - pd.Timedelta(days=365))
+    if mask_1y.sum() > 10:
+        close_1y = df.loc[mask_1y, "close"].values
+        cummax_1y = np.maximum.accumulate(close_1y)
+        dd_1y = (close_1y - cummax_1y) / cummax_1y
+        analytics["max_drawdown_1y"] = float(np.nanmin(dd_1y))
+    else:
+        analytics["max_drawdown_1y"] = None
+
+    # ── 近1年波动率 ──
+    if mask_1y.sum() > 20:
+        close_1y = df.loc[mask_1y, "close"].values
+        ret_1y = np.diff(close_1y) / close_1y[:-1]
+        ret_1y = ret_1y[np.isfinite(ret_1y)]
+        analytics["vol_1y"] = float(np.std(ret_1y) * np.sqrt(252))
+    else:
+        analytics["vol_1y"] = None
+
+    # ── 偏度 / 峰度 ──
+    if len(daily_returns) > 30:
+        try:
+            from scipy import stats as _stats
+            analytics["skewness"] = float(_stats.skew(daily_returns))
+            analytics["kurtosis"] = float(_stats.kurtosis(daily_returns))
+        except ImportError:
+            # scipy 未安装, 使用 numpy 手动计算
+            mean_r = np.mean(daily_returns)
+            std_r = np.std(daily_returns, ddof=0)
+            if std_r > 0:
+                n = len(daily_returns)
+                analytics["skewness"] = float(np.mean(((daily_returns - mean_r) / std_r) ** 3))
+                analytics["kurtosis"] = float(np.mean(((daily_returns - mean_r) / std_r) ** 4) - 3)
+            else:
+                analytics["skewness"] = None
+                analytics["kurtosis"] = None
+    else:
+        analytics["skewness"] = None
+        analytics["kurtosis"] = None
+
+    # ── 连续上涨 / 下跌天数 ──
+    if len(daily_returns) > 0:
+        streak = 0
+        if daily_returns[-1] > 0:
+            for r in reversed(daily_returns):
+                if r > 0:
+                    streak += 1
+                else:
+                    break
+            analytics["win_streak"] = streak
+            analytics["lose_streak"] = 0
+        elif daily_returns[-1] < 0:
+            for r in reversed(daily_returns):
+                if r < 0:
+                    streak += 1
+                else:
+                    break
+            analytics["win_streak"] = 0
+            analytics["lose_streak"] = streak
+        else:
+            analytics["win_streak"] = 0
+            analytics["lose_streak"] = 0
+    else:
+        analytics["win_streak"] = 0
+        analytics["lose_streak"] = 0
+
+    # ── 胜率 (日度) ──
+    if len(daily_returns) > 0:
+        analytics["win_rate"] = float(np.sum(daily_returns > 0) / len(daily_returns))
+    else:
+        analytics["win_rate"] = None
+
+    # Clean up NaN/Inf
+    for k, v in analytics.items():
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            analytics[k] = None
+
+    return analytics
+
+
+@app.route("/api/qis-index-history")
+def api_qis_index_history():
+    """获取 QIS 指数历史数据 + 分析指标。优先 HMC, 回退 Wind。"""
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "缺少 name 参数"}), 400
+
+    days = int(request.args.get("days", "3650"))  # 默认10年
+
+    # 缓存
+    cache_key = f"{name}_{days}"
+    if cache_key in _QIS_INDEX_CACHE:
+        cached = dict(_QIS_INDEX_CACHE[cache_key])
+        cached["cached"] = True
+        return jsonify(cached)
+
+    from datetime import timedelta
+    end_date = datetime.today().strftime("%Y-%m-%d")
+    start_date = (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    print(f"[QIS_INDEX] 查询指数历史: {name} ({start_date} ~ {end_date})")
+
+    # 1. 尝试 HMC
+    result = _fetch_qis_index_from_hmc(name, start_date, end_date)
+
+    # 2. 回退 Wind
+    if not result:
+        result = _fetch_qis_index_from_wind(name, start_date, end_date)
+
+    if not result:
+        return jsonify({"ok": False, "name": name, "error": f"HMC 和 Wind 均未找到 {name} 的历史数据"})
+
+    ohlcv = result["ohlcv"]
+    analytics = _compute_index_analytics(ohlcv)
+
+    response = {
+        "ok": True,
+        "name": name,
+        "source": result["source"],
+        "ohlcv": ohlcv,
+        "count": len(ohlcv),
+        "analytics": analytics,
+    }
+
+    _QIS_INDEX_CACHE[cache_key] = response
+    return jsonify(response)
 
 
 # -- News routes ---------------------------------------------------------------
@@ -576,7 +1152,8 @@ def api_market_data():
     """获取标的历史行情 + 技术指标 + 基本面数据。"""
     ticker = request.args.get("ticker", "").strip()
     name = request.args.get("name", "").strip()
-    days = int(request.args.get("days", "180"))
+    underlying = request.args.get("underlying", "").strip()  # 标的物 (可能含 BBG ticker)
+    days = int(request.args.get("days", "1095"))  # 默认3年
 
     # 如果只传了 name 没传 ticker, 从数据中反查
     if not ticker and name:
@@ -592,7 +1169,7 @@ def api_market_data():
     print(f"[MARKET_DATA] 获取行情: {name or ticker} (ticker={ticker}, days={days})")
 
     try:
-        result = fetch_market_data(wind_ticker=ticker, name=name, days=days)
+        result = fetch_market_data(wind_ticker=ticker, name=name, days=days, underlying=underlying)
         return jsonify(result)
     except Exception as exc:
         print(f"[MARKET_DATA] 异常: {exc}")
@@ -796,7 +1373,7 @@ def api_research_factors():
     print(f"[RESEARCH_FACTORS] {name or ticker} (ticker={ticker})")
     try:
         # 先获取市场数据（OHLCV + 基本面）
-        mdata = fetch_market_data(wind_ticker=ticker, name=name, days=180)
+        mdata = fetch_market_data(wind_ticker=ticker, name=name, days=1095)
         ohlcv = mdata.get("ohlcv", []) if mdata.get("ok") else []
         fundamentals = mdata.get("fundamentals", {}) if mdata.get("ok") else {}
 

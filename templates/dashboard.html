@@ -303,6 +303,111 @@
   .no-data { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
   .loading { text-align: center; padding: 60px; color: var(--text-muted); font-size: 15px; }
 
+  /* ── History Button ──────────────────────── */
+  .history-btn {
+    padding: 5px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    background: linear-gradient(135deg, rgba(56,189,248,0.15), rgba(129,140,248,0.15));
+    border: 1px solid rgba(56,189,248,0.3); color: var(--accent);
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .history-btn:hover {
+    background: linear-gradient(135deg, rgba(56,189,248,0.3), rgba(129,140,248,0.3));
+    border-color: var(--accent); transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(56,189,248,0.2);
+  }
+
+  /* ── Index History Modal ─────────────────── */
+  .idx-hist-overlay {
+    display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    background: rgba(0,0,0,0.7); z-index: 300; backdrop-filter: blur(4px);
+  }
+  .idx-hist-overlay.show { display: block; }
+  .idx-hist-modal {
+    display: none; position: fixed; top: 3vh; right: 3vw; bottom: 3vh; left: 3vw;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 16px;
+    z-index: 310; flex-direction: column; overflow: hidden;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+  }
+  .idx-hist-modal.show { display: flex; }
+  .idx-hist-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .idx-hist-header h3 { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .idx-hist-header .source-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 600;
+    background: rgba(52,211,153,0.15); color: var(--green); margin-left: 12px;
+  }
+  .idx-hist-close {
+    font-size: 28px; cursor: pointer; color: var(--text-muted);
+    border: none; background: none; transition: color 0.15s; line-height: 1;
+  }
+  .idx-hist-close:hover { color: var(--red); }
+  .idx-hist-body {
+    flex: 1; display: flex; overflow: hidden;
+  }
+  .idx-hist-left {
+    flex: 1; min-width: 0; overflow-y: auto; padding: 20px 24px;
+    border-right: 1px solid var(--border);
+  }
+  .idx-hist-right {
+    width: 420px; overflow-y: auto; padding: 20px 24px;
+  }
+  #idxChartContainer { width: 100%; height: 360px; margin-bottom: 16px; }
+  .idx-chart-loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 360px; color: var(--text-muted); font-size: 14px;
+  }
+
+  /* Analytics Cards */
+  .analytics-section { margin-bottom: 20px; }
+  .analytics-section-title {
+    font-size: 13px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .analytics-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .analytics-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .analytics-card .a-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.3px; margin-bottom: 3px;
+  }
+  .analytics-card .a-value {
+    font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .analytics-card .a-value.pos { color: var(--green); }
+  .analytics-card .a-value.neg { color: var(--red); }
+  .analytics-card .a-value.neutral { color: var(--accent); }
+  .analytics-card .a-sub {
+    font-size: 10px; color: var(--text-muted); margin-top: 2px;
+  }
+
+  /* Range buttons for chart */
+  .idx-range-bar {
+    display: flex; gap: 6px; margin-bottom: 12px;
+  }
+  .idx-range-btn {
+    padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .idx-range-btn:hover { color: var(--text); border-color: var(--text-muted); }
+  .idx-range-btn.active {
+    background: var(--accent); color: #0f172a; border-color: var(--accent);
+  }
+
+  @media (max-width: 1100px) {
+    .idx-hist-body { flex-direction: column; }
+    .idx-hist-right { width: 100%; border-right: none; border-top: 1px solid var(--border); }
+  }
+
   ::-webkit-scrollbar { height: 7px; width: 7px; }
   ::-webkit-scrollbar-track { background: var(--surface); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -915,6 +1020,27 @@
 <!-- Commodity Tooltip -->
 <div id="commodityTooltip" class="commodity-tooltip"></div>
 
+<!-- Index History Modal -->
+<div class="idx-hist-overlay" id="idxHistOverlay" onclick="closeIndexHistory()"></div>
+<div class="idx-hist-modal" id="idxHistModal">
+  <div class="idx-hist-header">
+    <div style="display:flex;align-items:center;">
+      <h3 id="idxHistTitle">📈 指数历史走势</h3>
+      <span class="source-badge" id="idxHistSource"></span>
+    </div>
+    <button class="idx-hist-close" onclick="closeIndexHistory()">&times;</button>
+  </div>
+  <div class="idx-hist-body">
+    <div class="idx-hist-left">
+      <div class="idx-range-bar" id="idxRangeBar"></div>
+      <div id="idxChartContainer"><div class="idx-chart-loading" id="idxChartLoading">⏳ 加载历史数据...</div></div>
+    </div>
+    <div class="idx-hist-right" id="idxAnalyticsPanel">
+      <div class="idx-chart-loading">选择指数查看分析指标</div>
+    </div>
+  </div>
+</div>
+
 <div class="header">
   <h1>📊 QIS SubBook Dashboard</h1>
   <div class="header-right">
@@ -991,7 +1117,7 @@
       <div class="left-tab-panel active" id="tabCharts">
         <div class="chart-section">
           <div class="chart-section-title">
-            <span>📈 价格走势 (6M Daily)</span>
+            <span id="chartRangeLabel">📈 价格走势</span>
             <span id="liveBadge" class="live-badge" style="display:none"><span class="live-dot"></span>LIVE</span>
             <span id="livePriceDisplay" class="live-price-display" style="display:none"></span>
           </div>
@@ -1072,7 +1198,7 @@ let sectorStates = {};  // {sectorName: {filtered: [], sortCol: -1, sortDir: 0}}
 let currentResearch = null;  // {name, price, change, exposure} for chat context
 let chatHistory = [];  // [{role: 'user'|'assistant', content: string}]
 
-const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","SubBook","BookID"];
+const SHOW_COLS_INDEX = ["标的物","现价","名称","涨跌幅","Delta($)","SOD Delta($)","%Gamma($)","风险敞口","当日损益","当日损益(合约端)","当日损益(对冲端)","存续名义本金","__history__"];
 const SHOW_COLS_OTHER = ["标的物","名称","Wind Ticker","现价","涨跌幅","%Gamma($)","风险敞口","__estimated_pnl__","__research__"];
 
 const numCols = new Set(["现价","涨跌幅","Delta($)","SOD Delta($)","PDE Delta($)","%Gamma($)","PDE Gamma(%)","Vega($)","FX Vega($)","Theta","现货市值","期货市值","风险敞口","T+1 风险敞口","风险敞口(PDE)","当日损益","当日损益(PDE)","当日损益(合约端)","当日损益(对冲端)","存续名义本金","Delta Shares","Open Shares","Need To Trade","Exposure pnl","Gamma pnl","Theta pnl","Vega pnl","Borrow pnl","Residual"]);
@@ -1125,7 +1251,7 @@ async function loadData() {
 
   colIdx = {};
   COLUMNS.forEach((c,i) => colIdx[c] = i);
-  idxShowI = SHOW_COLS_INDEX.map(c => colIdx[c]).filter(i => i !== undefined);
+  idxShowI = SHOW_COLS_INDEX.map(c => c === '__history__' ? -997 : colIdx[c]).filter(i => i !== undefined || i === -997);
   othShowI = SHOW_COLS_OTHER.map(c => c === '__research__' ? -999 : c === '__estimated_pnl__' ? -998 : colIdx[c]).filter(i => i !== undefined || i === -999 || i === -998);
   sbI = colIdx["SubBook"];
 
@@ -1498,6 +1624,7 @@ function renderHeader(kind) {
   const tr = document.getElementById(kind + "Header");
   tr.innerHTML = cols.map((ci, si) => {
     if (ci === -999) return `<th>研究</th>`;
+    if (ci === -997) return `<th>历史走势</th>`;
     let cls = s.sortCol === si ? (s.sortDir === 1 ? "sort-asc" : "sort-desc") : "";
     return `<th class="${cls}" onclick="doSort('${kind}',${si})">${COLUMNS[ci]}</th>`;
   }).join("");
@@ -1551,6 +1678,11 @@ function renderTable(kind) {
     const chg = row[colIdx['涨跌幅']];
     const rowClass = (typeof chg === 'number' && Math.abs(chg) > 0.02) ? ' class="big-move"' : '';
     return `<tr${rowClass}>` + showI.map(ci => {
+    if (ci === -997) {
+      const indexName = row[colIdx['标的物']] || row[colIdx['名称']] || '';
+      const escaped = indexName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `<td><button class="history-btn" onclick="showIndexHistory('${escaped}')">📈 历史走势</button></td>`;
+    }
     if (ci === -999) {
       const tickerName = row[colIdx['名称']] || row[colIdx['标的物']] || '';
       const price = row[colIdx['现价']];
@@ -1563,7 +1695,6 @@ function renderTable(kind) {
       return `<td><button class="research-btn" onclick="doResearch('${escaped}','${pStr}','${cStr}','${eStr}')">🔍 研究</button></td>`;
     }
     const col = COLUMNS[ci], v = row[ci];
-    if (col === "SubBook") return `<td><span class="sb-badge sb-${v}">${v}</span></td>`;
     const isNum = numCols.has(col) && typeof v === "number";
     let cls = isNum ? "num" : "";
     if (isNum && colorCols.has(col)) { if (v > 0) cls += " pos"; else if (v < 0) cls += " neg"; }
@@ -1581,8 +1712,8 @@ function renderTable(kind) {
 function exportCSV(kind) {
   const showI = kind === "index" ? idxShowI : othShowI;
   const data = state[kind].filtered;
-  const hdr = showI.map(ci => COLUMNS[ci]).join(",");
-  const rows = data.map(r => showI.map(ci => {
+  const hdr = showI.filter(ci => ci >= 0).map(ci => COLUMNS[ci]).join(",");
+  const rows = data.map(r => showI.filter(ci => ci >= 0).map(ci => {
     const v = r[ci]; if (v===null) return "";
     if (typeof v==="string" && v.includes(",")) return `"${v}"`;
     return v;
@@ -1595,12 +1726,266 @@ function exportCSV(kind) {
   a.click();
 }
 
+// ── Index History Modal ──────────────────────
+let _idxChart = null;
+let _idxLineSeries = null;
+let _idxAllOhlcv = null;  // full dataset
+let _idxCurrentRange = 'all';
+
+function closeIndexHistory() {
+  document.getElementById('idxHistOverlay').classList.remove('show');
+  document.getElementById('idxHistModal').classList.remove('show');
+  if (_idxChart) {
+    try { _idxChart.remove(); } catch(e) {}
+    _idxChart = null;
+    _idxLineSeries = null;
+  }
+}
+
+async function showIndexHistory(indexName) {
+  document.getElementById('idxHistOverlay').classList.add('show');
+  document.getElementById('idxHistModal').classList.add('show');
+  document.getElementById('idxHistTitle').textContent = `📈 ${indexName} 历史走势`;
+  document.getElementById('idxHistSource').textContent = '加载中...';
+  document.getElementById('idxHistSource').style.background = 'rgba(251,191,36,0.15)';
+  document.getElementById('idxHistSource').style.color = '#fbbf24';
+  document.getElementById('idxChartLoading').textContent = '⏳ 正在获取历史数据...';
+  document.getElementById('idxChartLoading').style.display = 'flex';
+  document.getElementById('idxAnalyticsPanel').innerHTML = '<div class="idx-chart-loading">⏳ 加载分析指标...</div>';
+  _idxAllOhlcv = null;
+  _idxCurrentRange = 'all';
+
+  // Render range buttons
+  renderIdxRangeBar();
+
+  try {
+    const resp = await fetch(`/api/qis-index-history?name=${encodeURIComponent(indexName)}&days=7300`);
+    const d = await resp.json();
+
+    if (!d.ok) {
+      document.getElementById('idxChartLoading').textContent = `❌ ${d.error || '无数据'}`;
+      document.getElementById('idxAnalyticsPanel').innerHTML = `<div class="idx-chart-loading">❌ ${d.error || '无法获取数据'}</div>`;
+      document.getElementById('idxHistSource').textContent = '失败';
+      document.getElementById('idxHistSource').style.background = 'rgba(248,113,113,0.15)';
+      document.getElementById('idxHistSource').style.color = '#f87171';
+      return;
+    }
+
+    document.getElementById('idxHistSource').textContent = `数据源: ${d.source.toUpperCase()} · ${d.count}条`;
+    document.getElementById('idxHistSource').style.background = d.source === 'hmc' ? 'rgba(52,211,153,0.15)' : 'rgba(129,140,248,0.15)';
+    document.getElementById('idxHistSource').style.color = d.source === 'hmc' ? '#34d399' : '#818cf8';
+
+    _idxAllOhlcv = d.ohlcv;
+    renderIdxChart(_idxAllOhlcv);
+    renderIdxAnalytics(d.analytics);
+
+  } catch(e) {
+    document.getElementById('idxChartLoading').textContent = `❌ 请求异常: ${e.message}`;
+    document.getElementById('idxAnalyticsPanel').innerHTML = `<div class="idx-chart-loading">❌ 请求异常</div>`;
+  }
+}
+
+function renderIdxRangeBar() {
+  const ranges = [
+    {key: '1m', label: '1月'},
+    {key: '3m', label: '3月'},
+    {key: '6m', label: '6月'},
+    {key: '1y', label: '1年'},
+    {key: '3y', label: '3年'},
+    {key: '5y', label: '5年'},
+    {key: 'all', label: '全部'},
+  ];
+  document.getElementById('idxRangeBar').innerHTML = ranges.map(r =>
+    `<button class="idx-range-btn ${r.key === _idxCurrentRange ? 'active' : ''}" onclick="setIdxRange('${r.key}')">${r.label}</button>`
+  ).join('');
+}
+
+function setIdxRange(range) {
+  _idxCurrentRange = range;
+  renderIdxRangeBar();
+  if (!_idxAllOhlcv) return;
+
+  const now = new Date();
+  let cutoff = null;
+  if (range === '1m') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  else if (range === '3m') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+  else if (range === '6m') cutoff = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+  else if (range === '1y') cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  else if (range === '3y') cutoff = new Date(now.getFullYear() - 3, now.getMonth(), now.getDate());
+  else if (range === '5y') cutoff = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
+
+  let data = _idxAllOhlcv;
+  if (cutoff) {
+    const cutStr = cutoff.toISOString().slice(0, 10);
+    data = _idxAllOhlcv.filter(r => r.date >= cutStr);
+  }
+  renderIdxChart(data);
+}
+
+function renderIdxChart(ohlcv) {
+  const container = document.getElementById('idxChartContainer');
+  document.getElementById('idxChartLoading').style.display = 'none';
+
+  if (_idxChart) {
+    try { _idxChart.remove(); } catch(e) {}
+    _idxChart = null;
+    _idxLineSeries = null;
+  }
+
+  if (!ohlcv || ohlcv.length === 0) {
+    document.getElementById('idxChartLoading').style.display = 'flex';
+    document.getElementById('idxChartLoading').textContent = '暂无数据';
+    return;
+  }
+
+  _idxChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 360,
+    layout: {
+      background: { type: 'solid', color: '#0f172a' },
+      textColor: '#94a3b8',
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: 'rgba(51,65,85,0.3)' },
+      horzLines: { color: 'rgba(51,65,85,0.3)' },
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    timeScale: { borderColor: '#334155', timeVisible: false },
+    rightPriceScale: { borderColor: '#334155' },
+  });
+
+  // Use area chart for nice visualization
+  _idxLineSeries = _idxChart.addAreaSeries({
+    lineColor: '#38bdf8',
+    topColor: 'rgba(56,189,248,0.28)',
+    bottomColor: 'rgba(56,189,248,0.02)',
+    lineWidth: 2,
+  });
+
+  const chartData = ohlcv
+    .filter(r => r.close !== null && r.close !== undefined)
+    .map(r => ({ time: r.date, value: r.close }));
+
+  _idxLineSeries.setData(chartData);
+  _idxChart.timeScale().fitContent();
+
+  // Resize observer
+  const ro = new ResizeObserver(() => {
+    if (_idxChart) _idxChart.applyOptions({ width: container.clientWidth });
+  });
+  ro.observe(container);
+}
+
+function renderIdxAnalytics(analytics) {
+  if (!analytics || Object.keys(analytics).length === 0) {
+    document.getElementById('idxAnalyticsPanel').innerHTML = '<div class="idx-chart-loading">暂无分析数据</div>';
+    return;
+  }
+
+  const a = analytics;
+  const fmtPctA = v => {
+    if (v === null || v === undefined) return '-';
+    return (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
+  };
+  const fmtValA = (v, digits=2) => {
+    if (v === null || v === undefined) return '-';
+    return typeof v === 'number' ? v.toFixed(digits) : String(v);
+  };
+  const clsA = v => {
+    if (v === null || v === undefined) return 'neutral';
+    return v > 0 ? 'pos' : v < 0 ? 'neg' : 'neutral';
+  };
+
+  let html = '';
+
+  // 涨跌幅
+  html += `<div class="analytics-section">
+    <div class="analytics-section-title">📊 涨跌幅</div>
+    <div class="analytics-grid">
+      ${_aCard('日涨跌', fmtPctA(a.chg_1d), clsA(a.chg_1d))}
+      ${_aCard('周涨跌', fmtPctA(a.chg_1w), clsA(a.chg_1w))}
+      ${_aCard('月涨跌', fmtPctA(a.chg_1m), clsA(a.chg_1m))}
+      ${_aCard('3月涨跌', fmtPctA(a.chg_3m), clsA(a.chg_3m))}
+      ${_aCard('6月涨跌', fmtPctA(a.chg_6m), clsA(a.chg_6m))}
+      ${_aCard('年初至今', fmtPctA(a.chg_ytd), clsA(a.chg_ytd))}
+      ${_aCard('1年涨跌', fmtPctA(a.chg_1y), clsA(a.chg_1y))}
+      ${_aCard('3年涨跌', fmtPctA(a.chg_3y), clsA(a.chg_3y))}
+      ${_aCard('成立以来', fmtPctA(a.chg_inception), clsA(a.chg_inception))}
+    </div>
+  </div>`;
+
+  // 风险指标
+  html += `<div class="analytics-section">
+    <div class="analytics-section-title">⚠️ 风险指标</div>
+    <div class="analytics-grid">
+      ${_aCard('最大回撤', fmtPctA(a.max_drawdown), 'neg', `${a.max_dd_start||''} ~ ${a.max_dd_end||''}`)}
+      ${_aCard('近1年最大回撤', fmtPctA(a.max_drawdown_1y), 'neg')}
+      ${_aCard('距最高点回撤', fmtPctA(a.drawdown_from_ath), clsA(a.drawdown_from_ath))}
+      ${_aCard('年化波动率', fmtPctA(a.annualized_vol), 'neutral')}
+      ${_aCard('近1年波动率', fmtPctA(a.vol_1y), 'neutral')}
+      ${_aCard('日波动率', a.daily_vol !== null && a.daily_vol !== undefined ? (a.daily_vol * 100).toFixed(3) + '%' : '-', 'neutral')}
+    </div>
+  </div>`;
+
+  // 收益指标
+  html += `<div class="analytics-section">
+    <div class="analytics-section-title">💰 收益指标</div>
+    <div class="analytics-grid">
+      ${_aCard('年化收益率', fmtPctA(a.annualized_return), clsA(a.annualized_return))}
+      ${_aCard('Sharpe Ratio', fmtValA(a.sharpe_ratio), clsA(a.sharpe_ratio), 'Rf=2.5%')}
+      ${_aCard('Calmar Ratio', fmtValA(a.calmar_ratio), clsA(a.calmar_ratio), '年化收益/最大回撤')}
+      ${_aCard('日胜率', a.win_rate !== null && a.win_rate !== undefined ? (a.win_rate * 100).toFixed(1) + '%' : '-', 'neutral')}
+    </div>
+  </div>`;
+
+  // 行情概览
+  html += `<div class="analytics-section">
+    <div class="analytics-section-title">📋 行情概览</div>
+    <div class="analytics-grid">
+      ${_aCard('最新收盘', fmtValA(a.latest_close, 4), 'neutral', a.latest_date)}
+      ${_aCard('历史最高', fmtValA(a.all_time_high, 4), 'neutral')}
+      ${_aCard('历史最低', fmtValA(a.all_time_low, 4), 'neutral')}
+      ${_aCard('数据起始', a.first_date || '-', 'neutral')}
+      ${_aCard('连续上涨', a.win_streak + '天', a.win_streak > 0 ? 'pos' : 'neutral')}
+      ${_aCard('连续下跌', a.lose_streak + '天', a.lose_streak > 0 ? 'neg' : 'neutral')}
+    </div>
+  </div>`;
+
+  // 统计特征
+  if (a.skewness !== null || a.kurtosis !== null) {
+    html += `<div class="analytics-section">
+      <div class="analytics-section-title">📐 统计特征</div>
+      <div class="analytics-grid">
+        ${_aCard('偏度', fmtValA(a.skewness, 3), 'neutral', a.skewness > 0 ? '右偏(正偏)' : a.skewness < 0 ? '左偏(负偏)' : '')}
+        ${_aCard('峰度', fmtValA(a.kurtosis, 3), 'neutral', a.kurtosis > 0 ? '尖峰(厚尾)' : '扁峰(薄尾)')}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('idxAnalyticsPanel').innerHTML = html;
+}
+
+function _aCard(label, value, cls, sub) {
+  return `<div class="analytics-card">
+    <div class="a-label">${label}</div>
+    <div class="a-value ${cls || 'neutral'}">${value}</div>
+    ${sub ? `<div class="a-sub">${sub}</div>` : ''}
+  </div>`;
+}
+
 // ── Event Listeners ───────────────────────────
 document.getElementById("indexSearch").addEventListener("input", () => applyFilter("index"));
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if (document.getElementById('idxHistModal').classList.contains('show')) closeIndexHistory();
+  }
+});
 
 // ── Research Modal ──────────────────────────────
 let mainChart = null, volumeChart = null, indicatorChart = null, tsChart = null;
 let mainCandleSeries = null, mainMASeries = {}, mainBollingerSeries = {};
+let _isLineChart = false;  // true when main chart is a line series (no OHLC data)
 let _pendingTsData = null;  // stored term structure data for deferred render
 let volumeSeries = null;
 let currentIndicator = 'macd';
@@ -1626,6 +2011,7 @@ function closeResearchPanel() {
   if (tsChart) { try { tsChart.remove(); } catch(e){} tsChart = null; }
   _pendingTsData = null;
   mainCandleSeries = null; mainMASeries = {}; mainBollingerSeries = {};
+  _isLineChart = false;
   volumeSeries = null; _realtimePriceLine = null;
   // Restore left panel tabs
   switchLeftTab('tabCharts');
@@ -2028,6 +2414,26 @@ function _drawTsChart(curve, structType) {
   tsChart.timeScale().fitContent();
 }
 
+// Re-render saved chat turns (history[0] is the initial research report, skip it)
+function _renderSavedChatMessages(history) {
+  let html = '';
+  for (let i = 1; i < history.length; i++) {
+    const msg = history[i];
+    if (msg.role === 'user') {
+      html += `<div class="chat-message user"><div class="chat-role">💬 你的问题</div><div>${msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div></div>`;
+    } else {
+      let text = msg.content
+        .replace(/### (.+)/g, '<h4 style="color:var(--accent);margin:12px 0 6px;">$1</h4>')
+        .replace(/## (.+)/g, '<h4 style="color:var(--accent);margin:12px 0 6px;">$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--accent2)">$1</strong>')
+        .replace(/\n\n/g, '</p><p style="margin:6px 0">')
+        .replace(/\n/g, '<br>');
+      html += `<div class="chat-message assistant"><div class="chat-role">🤖 百炼助手</div><div><p style="margin:6px 0">${text}</p></div></div>`;
+    }
+  }
+  return html;
+}
+
 function _setChatEnabled(enabled) {
   const footer = document.getElementById('researchChatFooter');
   const input = document.getElementById('researchChatInput');
@@ -2106,6 +2512,10 @@ async function sendChatMessage(event) {
       // Add to chat history
       chatHistory.push({ role: 'user', content: message });
       chatHistory.push({ role: 'assistant', content: data.content });
+      // Persist updated history so it survives panel close/reopen
+      if (currentResearch && researchCache[currentResearch.name]) {
+        researchCache[currentResearch.name].savedHistory = [...chatHistory];
+      }
       
       // Format and display response
       let text = data.content
@@ -2220,12 +2630,24 @@ function renderCharts(data) {
   const ohlcv = data.ohlcv || [];
   const indicators = data.indicators || {};
 
+  // Update chart title with dynamic range
+  const titleEl = document.getElementById('chartRangeLabel');
+  if (titleEl && ohlcv.length > 1) {
+    const d0 = ohlcv[0].date || '', d1 = ohlcv[ohlcv.length - 1].date || '';
+    const days = d0 && d1 ? Math.round((new Date(d1) - new Date(d0)) / 86400000) : 0;
+    const span = days > 365 ? Math.round(days / 365) + 'Y' :
+                 days > 30  ? Math.round(days / 30) + 'M' : days + 'D';
+    const srcTag = data.source === 'hmc' ? ' · HMC' : data.source === 'bloomberg' ? ' · BBG' : data.source === 'wind' ? ' · Wind' : '';
+    titleEl.textContent = `📈 价格走势 (${span} Daily${srcTag})`;
+  }
+
   // ── Main Chart (Candlestick + MAs + Bollinger) ──
   const mainEl = document.getElementById('mainChartContainer');
   mainEl.innerHTML = '';
   mainChart = _createChart(mainEl, 320);
 
-  // Candlestick
+  // Always use candlestick — null-coalesce missing open/high/low to close
+  _isLineChart = false;
   mainCandleSeries = mainChart.addCandlestickSeries({
     upColor: CHART_COLORS.up, downColor: CHART_COLORS.down,
     borderUpColor: CHART_COLORS.up, borderDownColor: CHART_COLORS.down,
@@ -2233,7 +2655,8 @@ function renderCharts(data) {
   });
   const candleData = ohlcv.filter(d => d.close != null).map(d => ({
     time: _toChartTime(d.date),
-    open: d.open, high: d.high, low: d.low, close: d.close,
+    open: d.open ?? d.close, high: d.high ?? d.close,
+    low: d.low ?? d.close, close: d.close,
   }));
   mainCandleSeries.setData(candleData);
 
@@ -2267,10 +2690,10 @@ function renderCharts(data) {
     priceFormat: { type: 'volume' },
     priceScaleId: '',
   });
-  const volData = ohlcv.filter(d => d.volume != null && d.close != null).map(d => ({
+  const volData = ohlcv.filter(d => d.volume != null && d.volume > 0 && d.close != null).map(d => ({
     time: _toChartTime(d.date),
     value: d.volume,
-    color: d.close >= d.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+    color: d.close >= (d.open ?? d.close) ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
   }));
   volumeSeries.setData(volData);
   volumeChart.timeScale().fitContent();
@@ -2440,9 +2863,19 @@ function renderFundamentals(data) {
   const dailyChg = close - prevClose;
   const dailyPct = prevClose ? ((dailyChg / prevClose) * 100).toFixed(2) : '0.00';
 
-  const high6m = Math.max(...ohlcv.filter(d => d.high != null).map(d => d.high));
-  const low6m = Math.min(...ohlcv.filter(d => d.low != null).map(d => d.low));
+  const highVals = ohlcv.filter(d => d.high != null).map(d => d.high);
+  const lowVals = ohlcv.filter(d => d.low != null).map(d => d.low);
+  // Fallback to close when OHLC is absent (e.g. Bloomberg indices)
+  const highAll = highVals.length ? Math.max(...highVals) : Math.max(...ohlcv.filter(d => d.close != null).map(d => d.close));
+  const lowAll = lowVals.length ? Math.min(...lowVals) : Math.min(...ohlcv.filter(d => d.close != null).map(d => d.close));
   const retPct = first.close ? (((close - first.close) / first.close) * 100).toFixed(2) : 'N/A';
+
+  // Dynamic range label
+  const firstDate = first.date || '';
+  const lastDate = latest.date || '';
+  const spanDays = firstDate && lastDate ? Math.round((new Date(lastDate) - new Date(firstDate)) / 86400000) : 0;
+  const rangeLabel = spanDays > 365 ? Math.round(spanDays / 365) + 'Y' :
+                     spanDays > 30  ? Math.round(spanDays / 30) + 'M' : spanDays + 'D';
 
   const oi = fund.open_interest || [];
   const latestOI = oi.length ? oi[oi.length - 1].value : null;
@@ -2456,7 +2889,8 @@ function renderFundamentals(data) {
   const avgVolVal = avgVol.length ? Math.round(avgVol.reduce((s, d) => s + d.volume, 0) / avgVol.length) : null;
 
   const sourceLabel = data.source === 'wind' ? '万得 Wind' :
-                      data.source === 'bloomberg' ? 'Bloomberg' : data.source || '未知';
+                      data.source === 'bloomberg' ? 'Bloomberg' :
+                      data.source === 'hmc' ? 'HMC (华泰)' : data.source || '未知';
 
   cards.innerHTML = `
     <div class="fund-card">
@@ -2465,9 +2899,9 @@ function renderFundamentals(data) {
       <div class="fc-sub">${dailyChg >= 0 ? '+' : ''}${fmtBig(dailyChg)} (${dailyPct}%)</div>
     </div>
     <div class="fund-card">
-      <div class="fc-label">6M 区间</div>
-      <div class="fc-value" style="color:var(--accent);font-size:14px">${fmtBig(low6m)} — ${fmtBig(high6m)}</div>
-      <div class="fc-sub">6M 涨跌: ${retPct}%</div>
+      <div class="fc-label">${rangeLabel} 区间</div>
+      <div class="fc-value" style="color:var(--accent);font-size:14px">${fmtBig(lowAll)} — ${fmtBig(highAll)}</div>
+      <div class="fc-sub">${rangeLabel} 涨跌: ${retPct}%</div>
     </div>
     <div class="fund-card">
       <div class="fc-label">20日均量</div>
@@ -2555,9 +2989,9 @@ async function _fetchRealtimePrice(windTicker, name) {
         // Update today's candle with real-time data
         const updatedCandle = {
           time: _toChartTime(today),
-          open: rt.open != null ? rt.open : lastBar.open,
-          high: Math.max(rt.high != null ? rt.high : lastBar.high, rt.price),
-          low: Math.min(rt.low != null ? rt.low : lastBar.low, rt.price),
+          open: rt.open != null ? rt.open : (lastBar.open ?? lastBar.close),
+          high: Math.max(rt.high != null ? rt.high : (lastBar.high ?? lastBar.close), rt.price),
+          low: Math.min(rt.low != null ? rt.low : (lastBar.low ?? lastBar.close), rt.price),
           close: rt.price,
         };
         mainCandleSeries.update(updatedCandle);
@@ -2571,7 +3005,7 @@ async function _fetchRealtimePrice(windTicker, name) {
           });
         }
       } else {
-        // Today is a new day not yet in historical data — append a new candle
+        // Today is a new day not yet in historical data — append a new bar
         const newCandle = {
           time: _toChartTime(today),
           open: rt.open != null ? rt.open : rt.price,
@@ -2657,7 +3091,14 @@ async function doResearch(name, price, change, exposure) {
     const data = researchCache[name];
     data.cached = true;
     content.innerHTML = _renderResearchContent(data);
-    chatHistory.push({ role: 'assistant', content: data.content });
+    // Restore full conversation history (including previous chat turns)
+    if (data.savedHistory && data.savedHistory.length > 0) {
+      chatHistory = [...data.savedHistory];
+      const savedChatHtml = _renderSavedChatMessages(data.savedHistory);
+      if (savedChatHtml) content.insertAdjacentHTML('beforeend', savedChatHtml);
+    } else {
+      chatHistory = [{ role: 'assistant', content: data.content }];
+    }
     _setChatEnabled(true);
     statusTag.style.display = 'inline-block';
     statusTag.textContent = '✅ 已缓存';
@@ -2688,14 +3129,16 @@ async function doResearch(name, price, change, exposure) {
   document.getElementById('termStructureContent').innerHTML =
     '<div class="ts-loading">⏳ 加载期限结构...</div>';
 
-  // Find Wind Ticker from dashboard data for this name
+  // Find Wind Ticker and underlying from dashboard data for this name
   let windTicker = '';
+  let underlying = '';
   const nameIdx = colIdx['名称'];
   const tickerIdx = colIdx['Wind Ticker'];
   const underlyingIdx = colIdx['标的物'];
   for (const row of OTHER_DATA) {
     if (row[nameIdx] === name || row[underlyingIdx] === name) {
       windTicker = row[tickerIdx] || '';
+      underlying = row[underlyingIdx] || '';
       break;
     }
   }
@@ -2709,6 +3152,7 @@ async function doResearch(name, price, change, exposure) {
     try {
       const params = new URLSearchParams({ name });
       if (windTicker) params.set('ticker', windTicker);
+      if (underlying && underlying !== windTicker) params.set('underlying', underlying);
       const resp = await fetch('/api/market-data?' + params.toString(), { signal: abortCtrl.signal });
       clearTimeout(abortTimer);
       const mdata = await resp.json();
@@ -2775,6 +3219,7 @@ async function startResearch() {
       researchCache[name] = data;
       content.innerHTML = _renderResearchContent(data);
       chatHistory = [{ role: 'assistant', content: data.content }];
+      researchCache[name].savedHistory = [...chatHistory];
       _setChatEnabled(true);
       statusTag.textContent = '✅ 完成';
       statusTag.style.background = 'rgba(52,211,153,0.15)';

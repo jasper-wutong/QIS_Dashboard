@@ -38,6 +38,9 @@ Thumbs.db
 # Coremail credentials (never commit!)
 coremail/param.json
 
+# HMC credentials (never commit!)
+hmc_token.txt
+
 # Downloads folder
 downloads/
 coremail/downloads/

@@ -200,6 +200,20 @@ def _db_update_meta(ticker, source, first_date, last_date):
         conn.close()
 
 
+def _db_clear_ticker(ticker):
+    # type: (str) -> None
+    """清除指定 ticker 的所有缓存数据 (用于数据源升级)。"""
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM ohlcv WHERE ticker = ?", (ticker,))
+        conn.execute("DELETE FROM open_interest WHERE ticker = ?", (ticker,))
+        conn.execute("DELETE FROM basis WHERE ticker = ?", (ticker,))
+        conn.execute("DELETE FROM fetch_meta WHERE ticker = ?", (ticker,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _db_load_ohlcv(ticker, start_date, end_date):
     # type: (str, str, str) -> List[dict]
     conn = _get_conn()
@@ -567,6 +581,8 @@ def _fetch_wind_realtime_subprocess(wind_ticker):
 
 _VENV_PYTHON = str(Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe")
 _BBG_HELPER = str(Path(__file__).resolve().parent / "bloomberg_helper.py")
+_HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_helper.py")
+_HMC_EARLIEST = "2010-01-01"  # HMC 历史数据起点 (全量拉取)
 
 
 def _fetch_bloomberg(bbg_ticker, start_date, end_date):
@@ -627,6 +643,355 @@ def _fetch_bloomberg(bbg_ticker, start_date, end_date):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  HMC 数据获取 (优先来源) — 通过 subprocess 调用 hmc_helper.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _fetch_hmc_subprocess(wind_ticker, start_date, end_date, underlying=""):
+    # type: (str, str, str, str) -> Dict[str, Any]
+    """
+    通过 subprocess 调用 hmc_helper.py 获取历史 OHLCV。
+
+    路由规则:
+      - 境内具体合约 (HC2605.SHF): SQL 查 FUT_DAY_QUOT, 含基差 + 持仓量
+      - 境内连续合约 (HC.SHF): 返回失败 (让 Wind 处理)
+      - 全球期货 (CL1 Comdty 格式): HMC 标准 --mode history API
+
+    Args:
+        underlying: 标的物列 (可能包含正确 Bloomberg ticker, 如 GXH6 Index)
+    """
+    import subprocess
+    import re as _re_hmc
+
+    if not os.path.isfile(_VENV_PYTHON):
+        return {"ok": False, "error": "未找到 venv Python: {}".format(_VENV_PYTHON)}
+    if not os.path.isfile(_HMC_HELPER):
+        return {"ok": False, "error": "未找到 hmc_helper.py: {}".format(_HMC_HELPER)}
+
+    env = os.environ.copy()
+    # gRPC 不正确识别 NO_PROXY 通配符 (10.50.*), 必须彻底清除代理
+    for _proxy_key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+                       "grpc_proxy", "GRPC_PROXY"):
+        env.pop(_proxy_key, None)
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
+
+    if _is_domestic(wind_ticker):
+        # 支持具体合约 (HC2605.SHF) 和连续合约 (HC.SHF)
+        # HMC FUT_DAY_QUOT 的 SEC_ID 包含交易所后缀, 如 "HC2605.SHF", "HC.SHF"
+        m_specific = _re_hmc.match(r'^([A-Za-z]+)(\d{3,6})\.(SHF|DCE|CZC|INE|CFE|GFEX)$',
+                                   wind_ticker, _re_hmc.IGNORECASE)
+        m_continuous = _re_hmc.match(r'^([A-Za-z]+)\.(SHF|DCE|CZC|INE|CFE|GFEX)$',
+                                     wind_ticker, _re_hmc.IGNORECASE)
+        if not m_specific and not m_continuous:
+            return {"ok": False, "error": "HMC 跳过非标格式: {}".format(wind_ticker)}
+
+        # SEC_ID 直接使用完整 Wind Ticker (含交易所后缀)
+        sec_id = wind_ticker.upper()
+        start_ddb = start_date.replace("-", ".")    # "2010.01.01"
+        end_ddb   = end_date.replace("-", ".")
+
+        sql = (
+            "select TRAN_DATE, OPEN_PRC, HIGH_PRC, LOW_PRC, CLOSE_PRC, "
+            "TX_QTY, VOHP, BASIS "
+            "from loadTable('dfs://HQUOT_CENTER_EOD', 'FUT_DAY_QUOT') "
+            "where TRAN_DATE >= {start} and TRAN_DATE <= {end} and SEC_ID = '{sec_id}' "
+            "order by TRAN_DATE asc"
+        ).format(start=start_ddb, end=end_ddb, sec_id=sec_id)
+
+        try:
+            result = subprocess.run(
+                [_VENV_PYTHON, _HMC_HELPER, "--mode", "query", "--sql", sql],
+                capture_output=True, text=True, timeout=90, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "HMC SQL 超时 (>90s)"}
+        except Exception as exc:
+            return {"ok": False, "error": "HMC SQL 异常: {}".format(exc)}
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            return {"ok": False, "error": "HMC SQL 无输出: {}".format(
+                result.stderr.strip()[:300] if result.stderr else "")}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "HMC SQL 无 JSON: {}".format(stdout[:300])}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "HMC SQL JSON 解析失败: {}".format(json_line[:200])}
+
+        if not data.get("ok"):
+            return data
+
+        rows = data.get("data", []) or []
+        ohlcv = []
+        oi_rows = []
+        basis_rows_h = []
+        for row in rows:
+            date_raw = row.get("TRAN_DATE")
+            date_str = str(date_raw)[:10] if date_raw else None
+            if not date_str:
+                continue
+            close_val = row.get("CLOSE_PRC")
+            if close_val is None:
+                continue
+            ohlcv.append({
+                "date":   date_str,
+                "open":   row.get("OPEN_PRC"),
+                "high":   row.get("HIGH_PRC"),
+                "low":    row.get("LOW_PRC"),
+                "close":  close_val,
+                "volume": row.get("TX_QTY"),
+            })
+            oi_val = row.get("VOHP")
+            if oi_val is not None:
+                oi_rows.append({"date": date_str, "value": oi_val})
+            basis_val = row.get("BASIS")
+            if basis_val is not None:
+                basis_rows_h.append({"date": date_str, "value": basis_val})
+
+        if not ohlcv:
+            # 连接正常但此区间无数据 (合约未上市或已到期)
+            return {"ok": True, "ohlcv": [], "source": "hmc", "fundamentals": {"open_interest": [], "basis": []}}
+
+        return {
+            "ok": True,
+            "source": "hmc",
+            "ohlcv": ohlcv,
+            "fundamentals": {
+                "open_interest": oi_rows,
+                "basis": basis_rows_h,   # HMC SQL 直接含基差
+            },
+        }
+
+    else:
+        # 全球期货 → HMC 标准 API (使用 Bloomberg 代码)
+        from ticker_mapping import resolve_bbg_ticker
+        # 优先使用 underlying (标的物列) 作为 BBG ticker — 表中已有正确映射
+        bbg = None
+        if underlying and (" Index" in underlying or " Comdty" in underlying):
+            bbg = underlying
+        if not bbg:
+            bbg = resolve_bbg_ticker(wind_ticker)
+        if not bbg:
+            return {"ok": False, "error": "无法映射为 Bloomberg/HMC ticker: {}".format(wind_ticker)}
+        print("[MARKET_DATA] HMC 境外: {} → BBG={}".format(wind_ticker, bbg))
+
+        try:
+            result = subprocess.run(
+                [_VENV_PYTHON, _HMC_HELPER,
+                 "--mode", "history",
+                 "--ticker", bbg,
+                 "--start", start_date,
+                 "--end", end_date],
+                capture_output=True, text=True, timeout=90, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "HMC history 超时 (>90s)"}
+        except Exception as exc:
+            return {"ok": False, "error": "HMC history 异常: {}".format(exc)}
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            return {"ok": False, "error": "HMC helper 无输出: {}".format(
+                result.stderr.strip()[:300] if result.stderr else "")}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "HMC helper 无 JSON: {}".format(stdout[:300])}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "HMC JSON 解析失败: {}".format(json_line[:200])}
+
+        if not data.get("ok"):
+            return data
+
+        rows = data.get("data", []) or []
+        ohlcv = []
+        oi_rows = []
+        for row in rows:
+            date_raw = row.get("date")
+            date_str = str(date_raw)[:10] if date_raw else None
+            if not date_str:
+                continue
+            close_val = row.get("close")
+            if close_val is None:
+                continue
+            ohlcv.append({
+                "date":   date_str,
+                "open":   row.get("open"),
+                "high":   row.get("high"),
+                "low":    row.get("low"),
+                "close":  close_val,
+                "volume": row.get("volume"),
+            })
+            oi_val = row.get("oi")
+            if oi_val is not None:
+                oi_rows.append({"date": date_str, "value": oi_val})
+
+        if not ohlcv:
+            # 连接正常但此区间无数据 (合约未上市或已到期)
+            return {"ok": True, "ohlcv": [], "source": "hmc", "fundamentals": {"open_interest": [], "basis": []}}
+
+        return {
+            "ok": True,
+            "source": "hmc",
+            "ohlcv": ohlcv,
+            "fundamentals": {
+                "open_interest": oi_rows,
+                "basis": [],
+            },
+        }
+
+
+def _fetch_hmc_realtime_subprocess(wind_ticker):
+    # type: (str) -> Dict[str, Any]
+    """
+    通过 subprocess 调用 hmc_helper.py 获取最新行情:
+    - 境内具体合约: SQL 查 FUT_DAY_QUOT 最新一行 (结算价/收盘价)
+    - 境内连续合约: 返回失败 (让 Wind 处理)
+    - 境外期货: HMC 标准 snapshot API (Bloomberg 代码)
+    """
+    import subprocess
+    import re as _re_hmc_rt
+
+    if not os.path.isfile(_VENV_PYTHON):
+        return {"ok": False, "error": "未找到 venv Python"}
+    if not os.path.isfile(_HMC_HELPER):
+        return {"ok": False, "error": "未找到 hmc_helper.py"}
+
+    env = os.environ.copy()
+    # gRPC 不正确识别 NO_PROXY 通配符, 必须彻底清除代理
+    for _proxy_key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+                       "grpc_proxy", "GRPC_PROXY"):
+        env.pop(_proxy_key, None)
+    env["NO_PROXY"] = "*"
+    env["no_proxy"] = "*"
+
+    if _is_domestic(wind_ticker):
+        m = _re_hmc_rt.match(r'^([A-Za-z]+)(\d{3,6})\.(SHF|DCE|CZC|INE|CFE|GFEX)$',
+                              wind_ticker, _re_hmc_rt.IGNORECASE)
+        if not m:
+            return {"ok": False, "error": "HMC RT 跳过连续合约: {}".format(wind_ticker)}
+
+        sec_id = wind_ticker.upper()   # "HC2605.SHF" — 含交易所后缀
+        sql = (
+            "select top 1 TRAN_DATE, OPEN_PRC, HIGH_PRC, LOW_PRC, CLOSE_PRC, "
+            "STTM_PRC, TX_QTY, VOHP "
+            "from loadTable('dfs://HQUOT_CENTER_EOD', 'FUT_DAY_QUOT') "
+            "where SEC_ID = '{sec_id}' "
+            "order by TRAN_DATE desc"
+        ).format(sec_id=sec_id)
+
+        try:
+            result = subprocess.run(
+                [_VENV_PYTHON, _HMC_HELPER, "--mode", "query", "--sql", sql],
+                capture_output=True, text=True, timeout=15, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "HMC RT 超时"}
+        except Exception as exc:
+            return {"ok": False, "error": "HMC RT 异常: {}".format(exc)}
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            return {"ok": False, "error": "HMC RT 无输出"}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "HMC RT 无 JSON"}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "HMC RT JSON 解析失败"}
+
+        if not data.get("ok"):
+            return data
+
+        rows = data.get("data", []) or []
+        if not rows:
+            return {"ok": False, "error": "HMC RT 返回空"}
+
+        row = rows[0]
+        # 优先结算价 STTM_PRC, 再用收盘价 CLOSE_PRC
+        price = row.get("STTM_PRC") or row.get("CLOSE_PRC")
+        if price is None:
+            return {"ok": False, "error": "HMC RT 价格为空"}
+
+        return {
+            "ok":     True,
+            "source": "hmc",
+            "price":  price,
+            "open":   row.get("OPEN_PRC"),
+            "high":   row.get("HIGH_PRC"),
+            "low":    row.get("LOW_PRC"),
+            "volume": row.get("TX_QTY"),
+            "time":   str(row.get("TRAN_DATE", ""))[:10],
+        }
+
+    else:
+        # 全球期货 → HMC 标准 snapshot (Bloomberg 代码)
+        from ticker_mapping import resolve_bbg_ticker
+        bbg = resolve_bbg_ticker(wind_ticker)
+        if not bbg:
+            return {"ok": False, "error": "无法映射 HMC ticker: {}".format(wind_ticker)}
+
+        try:
+            result = subprocess.run(
+                [_VENV_PYTHON, _HMC_HELPER,
+                 "--mode", "snapshot",
+                 "--ticker", bbg],
+                capture_output=True, text=True, timeout=15, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "HMC snapshot 超时"}
+        except Exception as exc:
+            return {"ok": False, "error": "HMC snapshot 异常: {}".format(exc)}
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            return {"ok": False, "error": "HMC snapshot 无输出"}
+
+        json_line = _extract_json_line(stdout)
+        if not json_line:
+            return {"ok": False, "error": "HMC snapshot 无 JSON: {}".format(stdout[:200])}
+
+        try:
+            data = json.loads(json_line)
+        except ValueError:
+            return {"ok": False, "error": "HMC snapshot JSON 解析失败"}
+
+        if not data.get("ok"):
+            return data
+
+        items = data.get("data", []) or []
+        if not items:
+            return {"ok": False, "error": "HMC snapshot 返回空"}
+
+        item = items[0]
+        # 优先 settlement (结算价), 再用 last (收盘价)
+        last = item.get("settlement") or item.get("last")
+        if last is None:
+            return {"ok": False, "error": "HMC snapshot last 为空"}
+
+        return {
+            "ok":     True,
+            "source": "hmc",
+            "price":  last,
+            "open":   item.get("open"),
+            "high":   item.get("high"),
+            "low":    item.get("low"),
+            "volume": item.get("volume"),
+            "time":   str(item.get("timestamp", ""))[:19],
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  增量拉取 + SQLite 持久化
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -658,39 +1023,67 @@ def _determine_fetch_range(ticker, desired_start, desired_end):
     return (fetch_start, desired_end)
 
 
-def _fetch_and_store(ticker, start_date, end_date, region):
-    # type: (str, str, str, str) -> Dict[str, Any]
+def _fetch_and_store(ticker, start_date, end_date, region, underlying=""):
+    # type: (str, str, str, str, str) -> Dict[str, Any]
     """
     拉取数据并存入 SQLite。
 
-    路由规则:
-      - 境内期货 (.SHF/.DCE/.CZC/.INE/.CFE) → Wind (subprocess)
-        - 若具体合约数据不足 (<20行), 自动回退到主力连续合约 (如 HC.SHF)
-      - 境外标的 → Bloomberg (subprocess)
-    """
-    if _is_domestic(ticker):
-        raw = _fetch_wind_subprocess(ticker, start_date, end_date)
+    路由规则 (优先级):
+      1. HMC (境内/全球期货) — 长历史、实时更新
+      2. 境内 → Wind (subprocess), 若 HMC 失败
+         - 具体合约数据不足 (<60行) 时自动回退到主力连续合约
+      3. 境外 → Bloomberg (subprocess), 若 HMC 失败
 
-        # 如果具体合约返回数据太少 (新合约不足3个月), 尝试主力连续合约
-        ohlcv_rows = len(raw.get("ohlcv", [])) if raw.get("ok") else 0
-        if ohlcv_rows < 60:
-            continuous = _to_continuous_ticker(ticker)
-            if continuous and continuous != ticker:
-                print("[MARKET_DATA] {} 仅返回 {} 行数据, 尝试主力连续 {}".format(
-                    ticker, ohlcv_rows, continuous))
-                raw2 = _fetch_wind_subprocess(continuous, start_date, end_date)
-                if raw2.get("ok") and len(raw2.get("ohlcv", [])) > ohlcv_rows:
-                    raw = raw2
-                    raw["_continuous_fallback"] = continuous
-                    print("[MARKET_DATA] 使用主力连续 {} ({} 行)".format(
-                        continuous, len(raw.get("ohlcv", []))))
+    Args:
+        underlying: 标的物列 (可能含正确 BBG ticker)
+    """
+    # ── 1. 先尝试 HMC ──
+    raw = _fetch_hmc_subprocess(ticker, start_date, end_date, underlying=underlying)
+    _hmc_ok_with_data = raw.get("ok") and len(raw.get("ohlcv", [])) > 0
+    _hmc_ok_empty = raw.get("ok") and len(raw.get("ohlcv", [])) == 0  # 连接正常但无数据
+
+    if _hmc_ok_with_data:
+        print("[MARKET_DATA] HMC 成功: {} ({} 行)".format(ticker, len(raw.get("ohlcv", []))))
+    elif _hmc_ok_empty:
+        # HMC 可达但此区间无数据: 记录“已搜索到 start_date”哨兵 — 无需 Wind 回退
+        print("[MARKET_DATA] HMC {} 范围内无数据 ({} ~ {}), 记录哨兵".format(ticker, start_date, end_date))
+        old_first, old_last = _db_get_date_range(ticker)
+        if old_first and old_last:
+            _db_update_meta(ticker, "hmc", min(start_date, old_first), old_last)
+        return raw  # ok=True, ohlcv=[]; 下游会读取现有 DB 数据
     else:
-        # 境外 → Bloomberg
-        from ticker_mapping import resolve_bbg_ticker
-        bbg_code = resolve_bbg_ticker(ticker)
-        if not bbg_code:
-            return {"ok": False, "error": "无法将 {} 映射为 Bloomberg ticker".format(ticker)}
-        raw = _fetch_bloomberg(bbg_code, start_date, end_date)
+        hmc_err = raw.get("error", "未知错误")
+        print("[MARKET_DATA] HMC 失败 ({}), 回退: {}".format(hmc_err[:80], ticker))
+
+        # ── 2. 境内: 回退 Wind ──
+        if _is_domestic(ticker):
+            raw = _fetch_wind_subprocess(ticker, start_date, end_date)
+
+            # 若具体合约数据太少 (未上市充分), 尝试主力连续合约
+            ohlcv_rows = len(raw.get("ohlcv", [])) if raw.get("ok") else 0
+            if ohlcv_rows < 60:
+                continuous = _to_continuous_ticker(ticker)
+                if continuous and continuous != ticker:
+                    print("[MARKET_DATA] {} 仅返回 {} 行, 尝试主力连续 {}".format(
+                        ticker, ohlcv_rows, continuous))
+                    raw2 = _fetch_wind_subprocess(continuous, start_date, end_date)
+                    if raw2.get("ok") and len(raw2.get("ohlcv", [])) > ohlcv_rows:
+                        raw = raw2
+                        raw["_continuous_fallback"] = continuous
+                        print("[MARKET_DATA] 使用主力连续 {} ({} 行)".format(
+                            continuous, len(raw.get("ohlcv", []))))
+        else:
+            # ── 3. 境外: 回退 Bloomberg ──
+            from ticker_mapping import resolve_bbg_ticker
+            bbg_code = None
+            if underlying and (" Index" in underlying or " Comdty" in underlying):
+                bbg_code = underlying
+            if not bbg_code:
+                bbg_code = resolve_bbg_ticker(ticker)
+            if not bbg_code:
+                return {"ok": False, "error": "无法将 {} 映射为 Bloomberg ticker".format(ticker)}
+            print("[MARKET_DATA] BBG 回退: {} → {}".format(ticker, bbg_code))
+            raw = _fetch_bloomberg(bbg_code, start_date, end_date)
 
     if not raw.get("ok"):
         return raw
@@ -706,7 +1099,9 @@ def _fetch_and_store(ticker, start_date, end_date, region):
 
     if ohlcv:
         all_dates = [r["date"] for r in ohlcv]
-        new_first = min(all_dates)
+        # new_first 取 start_date 与实际首行较小值:
+        # 记录「已向前搜索到 start_date」，防止下次重复拉取合约上市前的空区间
+        new_first = min(start_date, min(all_dates))
         new_last = max(all_dates)
         old_first, old_last = _db_get_date_range(ticker)
         if old_first:
@@ -721,8 +1116,8 @@ def _fetch_and_store(ticker, start_date, end_date, region):
 #  统一入口 (唯一公开函数)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def fetch_market_data(wind_ticker, name="", days=180):
-    # type: (str, str, int) -> Dict[str, Any]
+def fetch_market_data(wind_ticker, name="", days=180, underlying=""):
+    # type: (str, str, int, str) -> Dict[str, Any]
     """
     统一获取历史行情 + 技术指标 + 基本面数据。
 
@@ -754,22 +1149,45 @@ def fetch_market_data(wind_ticker, name="", days=180):
 
     # ── 2. 目标日期范围 ──
     end_date = datetime.today().strftime("%Y-%m-%d")
-    start_date = (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    # 若数据库中没有该 ticker 的数据, HMC 首次全量拉取从 _HMC_EARLIEST 开始
+    db_first_existing, db_last_existing = _db_get_date_range(wind_ticker)
+    existing_source = _db_get_source(wind_ticker)
+
+    hmc_available = os.path.isfile(_HMC_HELPER)
+
+    # 确定起始日期:
+    # 1. 首次拉取 (DB 无数据) → 从 _HMC_EARLIEST 开始
+    # 2. 已有 Wind 数据但 HMC 可用 → 不清除 Wind 数据，而是让增量逻辑向前补充历史
+    #    (start_date = _HMC_EARLIEST, _determine_fetch_range 会找出缺失的历史区间)
+    # 3. 已有 HMC 数据 → 普通增量 (start_date 不影响 read_start, 仅用于增量范围计算)
+    if db_first_existing is None:
+        start_date = _HMC_EARLIEST if hmc_available else (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+        if hmc_available:
+            print("[MARKET_DATA] 首次拉取 {}, 使用全量起点: {}".format(wind_ticker, start_date))
+    elif existing_source == "hmc" and hmc_available:
+        # HMC 数据已存在: 始终从 _HMC_EARLIEST 检查，防止滚动窗口 (today-10y) 引起的无限循环
+        start_date = _HMC_EARLIEST
+    elif existing_source == "wind" and hmc_available and _is_domestic(wind_ticker):
+        # 向前补充: 让 _determine_fetch_range 计算 (Wind 数据之前) 的历史缺口
+        start_date = _HMC_EARLIEST
+        print("[MARKET_DATA] wind→hmc 升级: {} 从 {} 补充历史".format(wind_ticker, start_date))
+    else:
+        start_date = (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     # ── 3. 数据源判断 ──
     region = resolve_region(wind_ticker)
 
     # ── 4. 增量拉取 ──
     fetch_range = _determine_fetch_range(wind_ticker, start_date, end_date)
-    source = _db_get_source(wind_ticker) or ("wind" if _is_domestic(wind_ticker) else "bloomberg")
+    source = existing_source or ("hmc" if hmc_available else
+                                 "wind" if _is_domestic(wind_ticker) else "bloomberg")
 
     if fetch_range is not None:
         fetch_start, fetch_end = fetch_range
-        data_source = "wind" if _is_domestic(wind_ticker) else "bloomberg"
-        print("[MARKET_DATA] 增量拉取 {} : {} ~ {} (source={})".format(
-            wind_ticker, fetch_start, fetch_end, data_source))
+        print("[MARKET_DATA] 增量拉取 {} : {} ~ {}".format(wind_ticker, fetch_start, fetch_end))
 
-        raw = _fetch_and_store(wind_ticker, fetch_start, fetch_end, region)
+        raw = _fetch_and_store(wind_ticker, fetch_start, fetch_end, region, underlying=underlying)
 
         if not raw.get("ok"):
             # API 失败 — 检查数据库是否有旧数据可用
@@ -788,10 +1206,11 @@ def fetch_market_data(wind_ticker, name="", days=180):
     else:
         print("[MARKET_DATA] SQLite 已覆盖, 直接读取: {}".format(wind_ticker))
 
-    # ── 5. 从 SQLite 读取 ──
-    ohlcv = _db_load_ohlcv(wind_ticker, start_date, end_date)
-    oi = _db_load_oi(wind_ticker, start_date, end_date)
-    basis_rows = _db_load_basis(wind_ticker, start_date, end_date)
+    # ── 5. 从 SQLite 读取 (按 days 限制展示区间; DB 中仍存有完整历史) ──
+    read_start = (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+    ohlcv = _db_load_ohlcv(wind_ticker, read_start, end_date)
+    oi = _db_load_oi(wind_ticker, read_start, end_date)
+    basis_rows = _db_load_basis(wind_ticker, read_start, end_date)
 
     if not ohlcv:
         return {"ok": False, "ticker": wind_ticker, "name": name, "error": "数据库中无 {} 的行情数据".format(wind_ticker)}
@@ -954,9 +1373,10 @@ def _fetch_realtime_bloomberg(bbg_ticker):
 def fetch_realtime_price(wind_ticker, name=""):
     # type: (str, str) -> Dict[str, Any]
     """
-    获取标的实时行情快照。
-    - 境内标的 (.SHF/.DCE/.CZC/.INE/.CFE) → Wind (subprocess)
-    - 境外标的 → Bloomberg (subprocess)
+    获取标的实时行情快照。优先级:
+      - 境内 → Wind wsq 实时行情 → HMC EOD 兜底
+      - 境外 → Bloomberg ReferenceData → HMC EOD 兜底
+    HMC 只有 EOD 日线数据, 因此仅在 Wind / Bloomberg 都失败时作为兜底。
     """
     import time as _time
 
@@ -967,16 +1387,28 @@ def fetch_realtime_price(wind_ticker, name=""):
         cached["cached"] = True
         return cached
 
+    result = None
+
     if _is_domestic(wind_ticker):
-        # 境内 → Wind
+        # ── 境内: 优先 Wind 实时行情 ──
         result = _fetch_wind_realtime_subprocess(wind_ticker)
+        if not (result.get("ok") and result.get("price") is not None):
+            wind_err = result.get("error", "")
+            print("[REALTIME] Wind 失败 ({}), 尝试 HMC 兜底: {}".format(wind_err[:60], wind_ticker))
+            result = _fetch_hmc_realtime_subprocess(wind_ticker)
     else:
-        # 境外 → Bloomberg
+        # ── 境外: 优先 Bloomberg 实时行情 ──
         from ticker_mapping import resolve_bbg_ticker
         bbg_code = resolve_bbg_ticker(wind_ticker)
-        if not bbg_code:
-            return {"ok": False, "error": "无法映射为 Bloomberg ticker: {}".format(wind_ticker)}
-        result = _fetch_realtime_bloomberg(bbg_code)
+        if bbg_code:
+            result = _fetch_realtime_bloomberg(bbg_code)
+        else:
+            result = {"ok": False, "error": "无法映射为 Bloomberg ticker: {}".format(wind_ticker)}
+
+        if not (result.get("ok") and result.get("price") is not None):
+            bbg_err = result.get("error", "")
+            print("[REALTIME] Bloomberg 失败 ({}), 尝试 HMC 兜底: {}".format(bbg_err[:60], wind_ticker))
+            result = _fetch_hmc_realtime_subprocess(wind_ticker)
 
     if result.get("ok"):
         result["ticker"] = wind_ticker

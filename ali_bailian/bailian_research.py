@@ -21,6 +21,20 @@ from dashscope import Application
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
+# 确保 dashscope.aliyuncs.com 可以通过代理访问
+# 优先使用 DASHSCOPE_PROXY，其次使用 HTTP_PROXY/HTTPS_PROXY
+_dashscope_proxy = (
+    os.getenv("DASHSCOPE_PROXY")
+    or os.getenv("HTTPS_PROXY")
+    or os.getenv("HTTP_PROXY")
+)
+if _dashscope_proxy:
+    # 如果当前未配置代理（包括空字符串），则设置代理
+    if not os.environ.get("HTTP_PROXY"):
+        os.environ["HTTP_PROXY"] = _dashscope_proxy
+    if not os.environ.get("HTTPS_PROXY"):
+        os.environ["HTTPS_PROXY"] = _dashscope_proxy
+
 # 百炼应用ID（RAG知识库应用）
 BAILIAN_APP_ID = os.getenv("BAILIAN_APP_ID", "5be4e5cbe00f478390842a0254bd8abb")
 
@@ -408,12 +422,33 @@ def research_ticker(
             
         except Exception as e:
             last_error = str(e)
+            err_type = type(e).__name__
+            # 网络连接错误（DNS解析失败、连接被拒绝等）—— 无需重试也无需Copilot fallback
+            _is_network_err = (
+                "ConnectionError" in err_type
+                or "NameResolutionError" in err_type
+                or "gaierror" in err_type
+                or "MaxRetryError" in err_type
+                or "getaddrinfo" in str(e)
+                or "Failed to resolve" in str(e)
+                or "Connection refused" in str(e)
+            )
+            if _is_network_err:
+                print(f"[BAILIAN] {name} 网络连接失败（DNS/代理问题）: {str(e)[:200]}")
+                return {
+                    "ok": False,
+                    "name": name,
+                    "model": "bailian-rag",
+                    "content": "",
+                    "error": "百炼API网络连接失败：无法访问 dashscope.aliyuncs.com，请检查代理配置（DASHSCOPE_PROXY）"
+                }
+
             if attempt < max_retries - 1:
                 print(f"[BAILIAN] {name} 第{attempt+1}次调用异常({e})，{2 ** attempt}秒后重试...")
                 time.sleep(2 ** attempt)
                 continue
             
-            # 异常后尝试fallback
+            # 最终失败后尝试fallback
             print(f"[BAILIAN] {name} 百炼API异常: {str(e)}")
             if use_fallback:
                 print(f"[BAILIAN] {name} 尝试Copilot SDK fallback...")
@@ -535,6 +570,27 @@ def chat_ticker(
             
         except Exception as e:
             last_error = str(e)
+            err_type = type(e).__name__
+            # 网络连接错误——无需重试也无需Copilot fallback
+            _is_network_err = (
+                "ConnectionError" in err_type
+                or "NameResolutionError" in err_type
+                or "gaierror" in err_type
+                or "MaxRetryError" in err_type
+                or "getaddrinfo" in str(e)
+                or "Failed to resolve" in str(e)
+                or "Connection refused" in str(e)
+            )
+            if _is_network_err:
+                print(f"[BAILIAN/CHAT] {name} 网络连接失败: {str(e)[:200]}")
+                return {
+                    "ok": False,
+                    "name": name,
+                    "model": "bailian-rag",
+                    "content": "",
+                    "error": "百炼API网络连接失败：无法访问 dashscope.aliyuncs.com，请检查代理配置（DASHSCOPE_PROXY）"
+                }
+
             if attempt < max_retries - 1:
                 print(f"[BAILIAN/CHAT] {name} 第{attempt+1}次调用异常，重试中...")
                 time.sleep(2 ** attempt)
