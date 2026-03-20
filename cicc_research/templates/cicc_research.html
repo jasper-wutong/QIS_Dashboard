@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📚 中金研究 - QIS Dashboard</title>
+  <style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #283548;
+    --surface3: #334155;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --orange: #fb923c;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 40px;
+    background: linear-gradient(135deg, var(--surface), var(--surface2));
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-btn {
+    padding: 8px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .header-btn:hover {
+    background: var(--accent);
+    color: #0f172a;
+    font-weight: 600;
+  }
+  .date-badge {
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Container */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 40px;
+  }
+
+  /* Status Banner */
+  .status-banner {
+    padding: 14px 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+  }
+  .status-banner.ok {
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    color: var(--green);
+  }
+  .status-banner.warn {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: var(--yellow);
+  }
+  .status-banner.error {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: var(--red);
+  }
+
+  /* Cookie Setup Card */
+  .cookie-setup {
+    background: linear-gradient(135deg, var(--surface), var(--surface2));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+  .cookie-setup h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+  .cookie-setup .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+  .step-num {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #0f172a;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .step-card h4 {
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .step-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .step-card code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--yellow);
+  }
+
+  /* Cookie Input */
+  .cookie-input-area {
+    margin-top: 16px;
+  }
+  .cookie-input-area label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .cookie-input-area textarea {
+    width: 100%;
+    height: 120px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px 16px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .cookie-input-area textarea:focus {
+    border-color: var(--accent);
+  }
+  .cookie-input-area textarea::placeholder {
+    color: var(--text-dim);
+  }
+  .cookie-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    align-items: center;
+  }
+  .btn-primary {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary {
+    padding: 10px 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: var(--surface3); }
+
+  /* Search Bar */
+  .search-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    align-items: center;
+  }
+  .search-input {
+    flex: 1;
+    padding: 12px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+  .search-input::placeholder {
+    color: var(--text-dim);
+  }
+
+  /* Report List */
+  .report-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .report-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .report-card:hover {
+    border-color: var(--accent);
+    background: var(--surface2);
+    transform: translateX(4px);
+  }
+  .report-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .report-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .report-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .report-abstract {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .report-category {
+    display: inline-block;
+    padding: 2px 10px;
+    background: rgba(129, 140, 248, 0.15);
+    color: var(--accent2);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 24px;
+    padding: 16px 0;
+  }
+  .page-btn {
+    padding: 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  .page-btn:hover { background: var(--surface2); color: var(--text); }
+  .page-btn.active {
+    background: var(--accent);
+    color: #0f172a;
+    font-weight: 600;
+    border-color: var(--accent);
+  }
+  .page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Detail Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 32px;
+    position: relative;
+  }
+  .modal-close {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    width: 36px;
+    height: 36px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .modal-close:hover { background: var(--red); color: white; }
+  .modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    padding-right: 48px;
+    line-height: 1.4;
+  }
+  .modal-meta {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .modal-content {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+  .modal-content p { margin-bottom: 12px; }
+  .modal-content a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .modal-content a:hover { text-decoration: underline; }
+
+  /* Loading */
+  .loading-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+  }
+  .loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--surface2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-muted); font-size: 14px; }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state h3 { font-size: 18px; color: var(--text-muted); margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 14px;
+    z-index: 300;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: var(--green); color: #0f172a; }
+  .toast.error { background: var(--red); color: white; }
+  .toast.info { background: var(--accent); color: #0f172a; }
+
+  /* Cookie toggle */
+  .toggle-section {
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-arrow {
+    display: inline-block;
+    transition: transform 0.2s;
+    margin-right: 6px;
+  }
+  .toggle-arrow.open { transform: rotate(90deg); }
+
+  /* Source Tabs */
+  .source-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 6px;
+    flex-wrap: wrap;
+  }
+  .source-tab {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  .source-tab:hover { background: var(--surface2); color: var(--text); }
+  .source-tab.active {
+    background: var(--accent);
+    color: #0f172a;
+    font-weight: 600;
+  }
+  /* Category filter strip */
+  .category-filter {
+    display: none;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .category-filter.visible { display: flex; }
+  .cat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding-right: 4px;
+  }
+  .cat-btn {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .cat-btn:hover { border-color: var(--accent); color: var(--text); }
+  .cat-btn.active {
+    background: var(--accent);
+    color: #0f172a;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>📚 中金研究院 CICC Research</h1>
+  <div class="header-right">
+    <span class="date-badge">{{ date_str }} {{ now_time }}</span>
+    <button class="header-btn" onclick="refreshData()">🔄 刷新</button>
+    <button class="header-btn" onclick="toggleCookiePanel()">🔑 Cookies</button>
+    <button class="header-btn" onclick="testConnection()">🔌 测试连接</button>
+    <a class="header-btn" href="/" style="text-decoration:none">📊 Dashboard</a>
+    <a class="header-btn" href="/morning-meeting" style="text-decoration:none">🎙️ 早会</a>
+    <a class="header-btn" href="/news" style="text-decoration:none">📰 新闻</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Status Banner -->
+  <div id="statusBanner" class="status-banner warn" style="display:none"></div>
+
+  <!-- Cookie Setup Panel (collapsible) -->
+  <div id="cookiePanel" class="cookie-setup" style="display:none">
+    <h2 class="toggle-section" onclick="toggleCookiePanel()">
+      <span id="cookieArrow" class="toggle-arrow">▶</span>
+      🔑 Cookie 配置
+    </h2>
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>关闭代理</h4>
+        <p>暂时禁用 <code>hkproxy</code>，确保可直接访问 CICC 网站。或在终端执行：<br><code>$env:HTTP_PROXY=""</code></p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>浏览器登录</h4>
+        <p>打开 <a href="https://www.research.cicc.com/zh_CN/reportList" target="_blank" style="color:var(--accent)">research.cicc.com</a>，用手机号验证码登录。</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>导出 Cookies</h4>
+        <p>方法一：安装 Chrome 扩展 <code>Cookie-Editor</code>，点击「Export → JSON」<br>
+           方法二：F12 → Console → 执行 <code>document.cookie</code> 复制结果</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <h4>粘贴到下方</h4>
+        <p>将 Cookies 粘贴到输入框中，支持 JSON 数组、JSON 对象、或 cookie 字符串三种格式。</p>
+      </div>
+    </div>
+
+    <div class="cookie-input-area">
+      <label>粘贴 Cookies（支持 JSON 数组 / JSON 对象 / cookie 字符串格式）</label>
+      <textarea id="cookieInput" placeholder='示例格式 1 (Cookie-Editor JSON):
+[{"name":"token","value":"xxx","domain":".research.cicc.com",...},...]
+
+示例格式 2 (简单 JSON):
+{"token":"xxx","session_id":"yyy"}
+
+示例格式 3 (cookie 字符串):
+token=xxx; session_id=yyy; ...'></textarea>
+      <div class="cookie-actions">
+        <button class="btn-primary" onclick="saveCookies()">💾 保存 Cookies</button>
+        <button class="btn-secondary" onclick="testConnection()">🔌 测试连接</button>
+        <span id="cookieStatus" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Bar -->
+  <div class="search-bar">
+    <input type="text" class="search-input" id="searchInput"
+           placeholder="🔍 搜索研究报告 (输入关键词后按回车)..."
+           onkeypress="if(event.key==='Enter')searchReports()">
+    <button class="btn-primary" onclick="searchReports()">搜索</button>
+    <button class="btn-secondary" onclick="clearSearch()">全部</button>
+  </div>
+
+  <!-- Source Tabs -->
+  <div class="source-tabs" id="sourceTabs">
+    <button class="source-tab active" data-source="hot" onclick="switchSource('hot')">🔥 热门研报</button>
+    <button class="source-tab" data-source="latest" onclick="switchSource('latest')">🗂️ 全部研报</button>
+    <button class="source-tab" data-source="focus" onclick="switchSource('focus')">📋 晨会焦点</button>
+    <button class="source-tab" data-source="recommend" onclick="switchSource('recommend')">💡 推荐研报</button>
+  </div>
+
+  <!-- Category Filter (visible only for 全部研报) -->
+  <div class="category-filter" id="categoryFilter">
+    <span class="cat-label">分类:</span>
+    <button class="cat-btn active" data-cat="0" onclick="filterByCategory(0)">全部</button>
+    <button class="cat-btn" data-cat="51" onclick="filterByCategory(51)">📊 宏观经济</button>
+    <button class="cat-btn" data-cat="52" onclick="filterByCategory(52)">📈 市场策略</button>
+    <button class="cat-btn" data-cat="53" onclick="filterByCategory(53)">🏭 行业研究</button>
+    <button class="cat-btn" data-cat="54" onclick="filterByCategory(54)">🏢 公司研究</button>
+    <button class="cat-btn" data-cat="55" onclick="filterByCategory(55)">⛽ 大宗商品</button>
+    <button class="cat-btn" data-cat="65" onclick="filterByCategory(65)">🌱 ESG</button>
+    <button class="cat-btn" data-cat="66" onclick="filterByCategory(66)">💱 全球外汇</button>
+    <button class="cat-btn" data-cat="68" onclick="filterByCategory(68)">🌏 全球研究</button>
+  </div>
+
+  <!-- Report List Area -->
+  <div id="reportArea">
+    <div class="loading-overlay" id="loadingArea">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">正在加载研究报告...</div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination" style="display:none"></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h2 class="modal-title" id="modalTitle"></h2>
+    <div class="modal-meta" id="modalMeta"></div>
+    <div class="modal-content" id="modalContent">
+      <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">加载报告内容...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let currentPage = 1;
+let currentKeyword = '';
+let currentSource = 'hot';
+let currentCategoryId = 0;
+let totalReports = 0;
+const PAGE_SIZE = 50;
+let cookiePanelOpen = false;
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkCookieStatus();
+  loadReports(1);
+});
+
+// ── Toast ────────────────────────────────────────────────────────
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+// ── Cookie Panel ─────────────────────────────────────────────────
+function toggleCookiePanel() {
+  cookiePanelOpen = !cookiePanelOpen;
+  const panel = document.getElementById('cookiePanel');
+  const arrow = document.getElementById('cookieArrow');
+  panel.style.display = cookiePanelOpen ? 'block' : 'none';
+  if (arrow) arrow.className = `toggle-arrow ${cookiePanelOpen ? 'open' : ''}`;
+}
+
+async function checkCookieStatus() {
+  try {
+    const r = await fetch('/api/cicc-research/cookies-status');
+    const d = await r.json();
+    const statusEl = document.getElementById('cookieStatus');
+    if (d.has_cookies) {
+      statusEl.textContent = `✅ 已配置 ${d.cookie_count} 个 Cookies (${d.last_updated || ''})`;
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.textContent = '⚠️ 未配置 Cookies';
+      statusEl.style.color = 'var(--yellow)';
+      // Auto-open cookie panel if no cookies
+      if (!cookiePanelOpen) toggleCookiePanel();
+    }
+  } catch(e) {
+    console.error('Failed to check cookie status:', e);
+  }
+}
+
+async function saveCookies() {
+  const input = document.getElementById('cookieInput').value.trim();
+  if (!input) {
+    showToast('请先粘贴 Cookies', 'error');
+    return;
+  }
+
+  try {
+    // Try parse as JSON first
+    let payload;
+    try {
+      payload = { cookies: JSON.parse(input) };
+    } catch {
+      // Treat as cookie string
+      payload = { cookies: input };
+    }
+
+    const r = await fetch('/api/cicc-research/cookies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(`✅ 已保存 ${d.cookie_count} 个 Cookies`, 'success');
+      checkCookieStatus();
+      loadReports(1);
+    } else {
+      showToast(`❌ ${d.error}`, 'error');
+    }
+  } catch(e) {
+    showToast(`保存失败: ${e.message}`, 'error');
+  }
+}
+
+// ── Connection Test ──────────────────────────────────────────────
+async function testConnection() {
+  showToast('正在测试连接...', 'info');
+  try {
+    const r = await fetch('/api/cicc-research/test');
+    const d = await r.json();
+    const banner = document.getElementById('statusBanner');
+    banner.style.display = 'flex';
+    if (d.ok) {
+      banner.className = 'status-banner ok';
+      banner.innerHTML = `✅ ${d.message}`;
+      showToast('连接成功！', 'success');
+    } else {
+      banner.className = 'status-banner error';
+      banner.innerHTML = `❌ ${d.message}`;
+      showToast(d.message, 'error');
+    }
+  } catch(e) {
+    showToast(`测试失败: ${e.message}`, 'error');
+  }
+}
+
+// ── Source Tabs ──────────────────────────────────────────────────
+function switchSource(src) {
+  currentSource = src;
+  currentKeyword = '';
+  currentCategoryId = 0;
+  document.getElementById('searchInput').value = '';
+  // Update tab UI
+  document.querySelectorAll('.source-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.source === src);
+  });
+  // Show/hide category filter
+  const catFilter = document.getElementById('categoryFilter');
+  if (src === 'latest') {
+    catFilter.classList.add('visible');
+  } else {
+    catFilter.classList.remove('visible');
+  }
+  // Reset category buttons
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === '0'));
+  loadReports(1);
+}
+
+function filterByCategory(catId) {
+  currentCategoryId = catId;
+  currentPage = 1;
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.cat) === catId);
+  });
+  loadReports(1);
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  loadReports(1);
+}
+
+// ── Load Reports ─────────────────────────────────────────────────
+async function loadReports(page) {
+  currentPage = page;
+  currentKeyword = '';
+  const area = document.getElementById('reportArea');
+  area.innerHTML = `<div class="loading-overlay"><div class="loading-spinner"></div><div class="loading-text">正在加载研究报告...</div></div>`;
+  document.getElementById('pagination').style.display = 'none';
+
+  try {
+    const catParam = (currentSource === 'latest' && currentCategoryId) ? `&categoryId=${currentCategoryId}` : '';
+    const r = await fetch(`/api/cicc-research/reports?page=${page}&pageSize=${PAGE_SIZE}&source=${currentSource}${catParam}`);
+    const d = await r.json();
+    renderReports(d);
+  } catch(e) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>加载失败</h3><p>${e.message}</p></div>`;
+  }
+}
+
+async function searchReports() {
+  const kw = document.getElementById('searchInput').value.trim();
+  if (!kw) { loadReports(1); return; }
+  currentKeyword = kw;
+  currentPage = 1;
+
+  const area = document.getElementById('reportArea');
+  area.innerHTML = `<div class="loading-overlay"><div class="loading-spinner"></div><div class="loading-text">搜索 "${kw}" ...</div></div>`;
+  document.getElementById('pagination').style.display = 'none';
+
+  try {
+    const r = await fetch(`/api/cicc-research/search?keyword=${encodeURIComponent(kw)}&page=1&pageSize=${PAGE_SIZE}`);
+    const d = await r.json();
+    renderReports(d);
+  } catch(e) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>搜索失败</h3><p>${e.message}</p></div>`;
+  }
+}
+
+function renderReports(data) {
+  const area = document.getElementById('reportArea');
+
+  if (!data.ok) {
+    // Show error with cookie setup hint
+    let errorHtml = `<div class="empty-state">
+      <div class="icon">🔑</div>
+      <h3>${data.error || '无法获取报告'}</h3>
+      <p style="margin-top:12px">
+        <button class="btn-primary" onclick="toggleCookiePanel()" style="margin-right:8px">配置 Cookies</button>
+        <button class="btn-secondary" onclick="testConnection()">测试连接</button>
+      </p></div>`;
+    area.innerHTML = errorHtml;
+    document.getElementById('statusBanner').style.display = 'flex';
+    document.getElementById('statusBanner').className = 'status-banner error';
+    document.getElementById('statusBanner').innerHTML = `❌ ${data.error || '获取报告失败'}`;
+    return;
+  }
+
+  if (!data.reports || data.reports.length === 0) {
+    area.innerHTML = `<div class="empty-state"><div class="icon">📭</div><h3>暂无报告</h3><p>当前条件下没有找到研究报告</p></div>`;
+    return;
+  }
+
+  totalReports = data.total || data.reports.length;
+  let html = '<div class="report-list">';
+
+  for (const rpt of data.reports) {
+    html += `
+    <div class="report-card" onclick="openReport('${rpt.id}')">
+      <div class="report-title">${escHtml(rpt.title)}</div>
+      <div class="report-meta">
+        ${rpt.date ? `<span>📅 ${escHtml(rpt.date)}</span>` : ''}
+        ${rpt.authors ? `<span>✍️ ${escHtml(rpt.authors)}</span>` : ''}
+        ${rpt.category ? `<span class="report-category">${escHtml(rpt.category)}</span>` : ''}
+      </div>
+      ${rpt.abstract ? `<div class="report-abstract">${escHtml(rpt.abstract)}</div>` : ''}
+    </div>`;
+  }
+
+  html += '</div>';
+  area.innerHTML = html;
+
+  // Render pagination
+  renderPagination();
+
+  // Update status
+  const sourceNames = { hot: '热门研报', latest: '全部研报(聚合)', focus: '晨会焦点', recommend: '推荐研报' };
+  const catNames = { 51:'宏观经济', 52:'市场策略', 53:'行业研究', 54:'公司研究', 55:'大宗商品', 65:'ESG', 66:'全球外汇', 68:'全球研究' };
+  const sourceName = sourceNames[currentSource] || currentSource;
+  const catSuffix = (currentSource === 'latest' && currentCategoryId && catNames[currentCategoryId]) ? ` | ${catNames[currentCategoryId]}` : '';
+  const banner = document.getElementById('statusBanner');
+  banner.style.display = 'flex';
+  banner.className = 'status-banner ok';
+  banner.innerHTML = `✅ ${sourceName}${catSuffix}：共 ${totalReports} 篇 | 第 ${currentPage} 页${currentKeyword ? ` | 搜索: "${currentKeyword}"` : ''}`;
+}
+
+function renderPagination() {
+  const totalPages = Math.ceil(totalReports / PAGE_SIZE);
+  if (totalPages <= 1) {
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+  let html = '';
+  html += `<button class="page-btn" ${currentPage<=1?'disabled':''} onclick="goPage(${currentPage-1})">◀ 上页</button>`;
+  const start = Math.max(1, currentPage - 3);
+  const end = Math.min(totalPages, start + 6);
+  for (let i = start; i <= end; i++) {
+    html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html += `<button class="page-btn" ${currentPage>=totalPages?'disabled':''} onclick="goPage(${currentPage+1})">下页 ▶</button>`;
+  const pg = document.getElementById('pagination');
+  pg.innerHTML = html;
+  pg.style.display = 'flex';
+}
+
+function goPage(p) {
+  if (currentKeyword) {
+    currentPage = p;
+    const area = document.getElementById('reportArea');
+    area.innerHTML = `<div class="loading-overlay"><div class="loading-spinner"></div><div class="loading-text">加载第 ${p} 页...</div></div>`;
+    fetch(`/api/cicc-research/search?keyword=${encodeURIComponent(currentKeyword)}&page=${p}&pageSize=${PAGE_SIZE}`)
+      .then(r => r.json()).then(d => renderReports(d));
+  } else {
+    loadReports(p);
+  }
+}
+
+// ── Report Detail ────────────────────────────────────────────────
+async function openReport(id) {
+  const modal = document.getElementById('detailModal');
+  modal.classList.add('open');
+  document.getElementById('modalTitle').textContent = '加载中...';
+  document.getElementById('modalMeta').innerHTML = '';
+  document.getElementById('modalContent').innerHTML = `<div class="loading-overlay"><div class="loading-spinner"></div><div class="loading-text">加载报告内容...</div></div>`;
+
+  try {
+    const r = await fetch(`/api/cicc-research/report/${id}`);
+    const d = await r.json();
+    if (d.ok && d.report) {
+      const rpt = d.report;
+      const reportUrl = rpt.url || `https://www.research.cicc.com/zh_CN/report/detail/${id}`;
+      document.getElementById('modalTitle').textContent = rpt.title || `报告 #${id}`;
+      document.getElementById('modalMeta').innerHTML = `
+        ${rpt.date ? `<span>📅 ${escHtml(rpt.date)}</span>` : ''}
+        ${rpt.authors ? `<span>✍️ ${escHtml(rpt.authors)}</span>` : ''}
+        <a href="${reportUrl}" target="_blank" style="color:var(--accent)">🔗 在浏览器中打开</a>
+      `;
+      // If we have actual content, show it; otherwise provide a browser link
+      if (rpt.content_html && rpt.content_html.trim().length > 100) {
+        document.getElementById('modalContent').innerHTML = rpt.content_html;
+      } else if (rpt.content && rpt.content.trim().length > 50) {
+        document.getElementById('modalContent').innerHTML = `<p>${escHtml(rpt.content)}</p>`;
+      } else {
+        const abstract = rpt.abstract || '';
+        document.getElementById('modalContent').innerHTML = `
+          ${abstract ? `<p style="margin-bottom:20px;line-height:1.8">${escHtml(abstract)}</p>` : ''}
+          <div style="background:var(--surface2);border-radius:10px;padding:20px;text-align:center;margin-top:16px">
+            <p style="color:var(--text-muted);margin-bottom:12px">报告全文需在 CICC Research 网站查看</p>
+            <a href="${reportUrl}" target="_blank"
+               style="display:inline-block;padding:10px 24px;background:var(--accent);color:#0f172a;border-radius:8px;text-decoration:none;font-weight:600">
+              🔗 在浏览器中打开报告
+            </a>
+          </div>`;
+      }
+    } else {
+      const fallbackUrl = `https://www.research.cicc.com/zh_CN/report/detail/${id}`;
+      document.getElementById('modalTitle').textContent = `报告 #${id}`;
+      document.getElementById('modalContent').innerHTML = `
+        <div style="background:var(--surface2);border-radius:10px;padding:20px;text-align:center">
+          <p style="color:var(--text-muted);margin-bottom:12px">${d.error || '报告详情需要在网站查看'}</p>
+          <a href="${fallbackUrl}" target="_blank"
+             style="display:inline-block;padding:10px 24px;background:var(--accent);color:#0f172a;border-radius:8px;text-decoration:none;font-weight:600">
+            🔗 在浏览器中打开
+          </a>
+        </div>`;
+    }
+  } catch(e) {
+    document.getElementById('modalTitle').textContent = '加载失败';
+    document.getElementById('modalContent').innerHTML = `<p style="color:var(--red)">${e.message}</p>`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('detailModal').classList.remove('open');
+}
+
+// ── Refresh ──────────────────────────────────────────────────────
+function refreshData() {
+  fetch('/api/cicc-research/clear-cache', { method: 'POST' });
+  loadReports(currentPage);
+  showToast('刷新中...', 'info');
+}
+function escHtml(s) {
+  if (!s) return '';
+  const div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

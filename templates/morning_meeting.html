@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎙️ 早会发言 - QIS Dashboard</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #283548;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --yellow: #fbbf24;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+    --gold: #f59e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ──────────────────────────────── */
+  .header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--gold), var(--orange));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header .date-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .header .date-badge strong { color: var(--accent); }
+  .refresh-btn {
+    padding: 7px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { background: var(--accent); color: #0f172a; font-weight: 600; }
+  .refresh-btn.active { background: var(--gold); color: #0f172a; font-weight: 600; border-color: var(--gold); }
+
+  /* ── Generate button ─────────────────────── */
+  .gen-btn {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, var(--gold), var(--orange));
+    border: none;
+    border-radius: 10px;
+    color: #0f172a;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.3s;
+    letter-spacing: 0.5px;
+  }
+  .gen-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4); }
+  .gen-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .gen-btn.loading {
+    background: var(--surface2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Container ───────────────────────────── */
+  .container { max-width: 1640px; margin: 0 auto; padding: 20px 40px 60px; }
+
+  /* ── Status bar ──────────────────────────── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-badge.ok { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .status-badge.fail { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+  .status-badge.pending { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+  .status-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    display: inline-block;
+  }
+  .status-badge.ok .dot { background: var(--green); }
+  .status-badge.fail .dot { background: var(--red); }
+  .status-badge.pending .dot { background: var(--text-muted); }
+  .status-timestamp { margin-left: auto; color: var(--text-muted); font-size: 13px; }
+
+  /* ── Progress ────────────────────────────── */
+  .progress-container {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 40px;
+    text-align: center;
+  }
+  .progress-container.active { display: flex; }
+  .progress-spinner {
+    width: 60px; height: 60px;
+    border: 4px solid var(--border);
+    border-top: 4px solid var(--gold);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 24px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-text { color: var(--text-muted); font-size: 16px; }
+  .progress-phase { color: var(--gold); font-size: 14px; margin-top: 8px; font-weight: 600; }
+
+  /* ── Two-panel layout ────────────────────── */
+  .panels {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 24px;
+  }
+  @media (max-width: 1100px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, var(--surface2) 0%, var(--surface) 100%);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .panel-header .icon { font-size: 20px; }
+  .panel-header .label { flex: 1; }
+  .panel-body {
+    padding: 24px;
+    line-height: 1.8;
+    font-size: 14.5px;
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+  }
+
+  /* ── Markdown rendering ──────────────────── */
+  .panel-body h1, .panel-body h2, .panel-body h3 {
+    color: var(--accent);
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 16px;
+  }
+  .panel-body h1 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .panel-body h2 { font-size: 16px; color: var(--gold); }
+  .panel-body h3 { font-size: 15px; color: var(--cyan); }
+  .panel-body p { margin-bottom: 12px; }
+  .panel-body strong { color: var(--accent); font-weight: 600; }
+  .panel-body em { color: var(--yellow); font-style: italic; }
+  .panel-body ul, .panel-body ol { margin: 8px 0 12px 20px; }
+  .panel-body li { margin-bottom: 6px; }
+  .panel-body code {
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--cyan);
+  }
+  .panel-body blockquote {
+    border-left: 3px solid var(--gold);
+    padding: 8px 16px;
+    margin: 12px 0;
+    background: rgba(245, 158, 11, 0.06);
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .panel-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  /* ── Recommendation cards ────────────────── */
+  .rec-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .rec-card:hover { border-color: var(--gold); }
+  .rec-card h3 {
+    color: var(--gold) !important;
+    font-size: 15px !important;
+    margin-top: 0 !important;
+    margin-bottom: 10px !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rec-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent);
+  }
+
+  /* ── Empty state ─────────────────────────── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 40px;
+    text-align: center;
+  }
+  .empty-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
+  .empty-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .empty-desc { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; max-width: 400px; }
+
+  /* ── Scrollbar ───────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* ── Error state ─────────────────────────── */
+  .error-box {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid var(--red);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+    color: var(--red);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────── -->
+<div class="header">
+  <h1>🎙️ 早会发言 — Morning Briefing</h1>
+  <div class="header-right">
+    <button class="refresh-btn" onclick="window.location.href='/'">📊 Dashboard</button>
+    <button class="refresh-btn" onclick="window.location.href='/analysis'">🔬 Analysis</button>
+    <button class="refresh-btn" onclick="window.location.href='/qis-book'">📊 QIS BOOK</button>
+    <button class="refresh-btn" onclick="window.location.href='/news'">📰 新闻</button>
+    <button class="refresh-btn active" onclick="window.location.href='/morning-meeting'">🎙️ 早会</button>
+    <button class="gen-btn" id="genBtn" onclick="generateSpeech()">⚡ 生成今日早会</button>
+    <div class="date-badge">Data: <strong id="dateLabel">{{ date_str }}</strong> &nbsp;|&nbsp; {{ now_time }}</div>
+  </div>
+</div>
+
+<!-- ── Main content ──────────────────────────────────────────── -->
+<div class="container">
+
+  <!-- Status bar (visible after generation) -->
+  <div class="status-bar" id="statusBar" style="display:none;">
+    <span style="font-weight:600; font-size:13px;">📡 数据源状态:</span>
+    <div id="sourcesBadges"></div>
+    <div class="status-timestamp" id="statusTimestamp"></div>
+  </div>
+
+  <!-- Progress overlay -->
+  <div class="progress-container" id="progressContainer">
+    <div class="progress-spinner"></div>
+    <div class="progress-text">正在生成早会发言...</div>
+    <div class="progress-phase" id="progressPhase">初始化数据采集</div>
+    <div style="color: var(--text-muted); font-size: 12px; margin-top: 16px;">
+      采集新闻、X/Twitter、Telegram、Polymarket、中金研究 + Book数据 → AI分析生成
+    </div>
+  </div>
+
+  <!-- Empty state (initial) -->
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🎙️</div>
+    <div class="empty-title">今日早会尚未生成</div>
+    <div class="empty-desc">
+      点击右上角「⚡ 生成今日早会」按钮，系统将从 10+ 数据源采集最新信息，
+      通过 AI 生成 Goldman-trader 风格的晨会发言和期权结构推荐。
+    </div>
+    <button class="gen-btn" onclick="generateSpeech()">⚡ 生成今日早会</button>
+  </div>
+
+  <!-- Two-panel content (visible after generation) -->
+  <div class="panels" id="panelsContainer" style="display:none;">
+
+    <!-- Left: Morning Speech -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">🎙️</span>
+        <span class="label">早会发言 — Morning Briefing</span>
+        <span id="modelBadge" style="font-size:11px; color:var(--text-muted); font-weight:400;"></span>
+      </div>
+      <div class="panel-body" id="speechContent">
+      </div>
+    </div>
+
+    <!-- Right: Options Structure Recommendations -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="icon">📐</span>
+        <span class="label">期权结构推荐 — Options Structures</span>
+      </div>
+      <div class="panel-body" id="recsContent">
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Error display -->
+  <div class="error-box" id="errorBox" style="display:none;">
+    <strong>⚠️ 生成失败</strong>
+    <p id="errorText"></p>
+    <button class="gen-btn" onclick="generateSpeech(true)" style="margin-top:12px;">🔄 重试</button>
+  </div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+let pollTimer = null;
+
+// ── Simple Markdown → HTML renderer ─────────────────────────
+function renderMarkdown(md) {
+  if (!md) return '';
+  let html = md
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold and italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Blockquotes
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // Horizontal rules
+    .replace(/^---+$/gm, '<hr>')
+    // Unordered lists
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    // Numbered lists
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+
+  // Paragraphs (lines not already tagged)
+  html = html.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<')) return trimmed;
+    return `<p>${trimmed}</p>`;
+  }).join('\n');
+
+  // Clean up
+  html = html.replace(/<\/blockquote>\n<blockquote>/g, '<br>');
+  return html;
+}
+
+// ── Render recommendation section with cards ────────────────
+function renderRecommendations(md) {
+  if (!md) return '<p style="color:var(--text-muted);">无期权结构推荐数据</p>';
+
+  // Try to split into individual recommendations by numbered headers or bold headings
+  const sections = md.split(/(?=\d+\.\s*\*\*|###\s*\d+)/);
+  if (sections.length <= 1) {
+    // Fallback: just render as markdown
+    return renderMarkdown(md);
+  }
+
+  let html = '';
+  for (const sec of sections) {
+    const trimmed = sec.trim();
+    if (!trimmed) continue;
+
+    // Extract title from first line
+    const lines = trimmed.split('\n');
+    let title = lines[0].replace(/^[\d.]+\s*/, '').replace(/\*\*/g, '').replace(/^###\s*/, '').trim();
+    const body = lines.slice(1).join('\n').trim();
+
+    html += `<div class="rec-card">
+      <h3>📐 ${title}</h3>
+      ${renderMarkdown(body)}
+    </div>`;
+  }
+  return html || renderMarkdown(md);
+}
+
+// ── Render data source badges ───────────────────────────────
+const SOURCE_LABELS = {
+  finance_news: '📈 财经新闻',
+  nitter_x: '🐦 X/Twitter',
+  telegram: '📱 Telegram',
+  substack: '📝 Substack',
+  polymarket: '🎯 Polymarket',
+  web_search: '🔍 Web搜索',
+  cicc_morning_focus: '📚 中金晨焦',
+  cicc_commodity: '🛢️ 中金商品',
+  cicc_macro: '🌐 中金宏观',
+  cicc_strategy: '📊 中金策略',
+  bailian_rag: '🤖 百炼RAG',
+  book: '📖 Book数据',
+};
+
+function renderSourceBadges(sources) {
+  if (!sources || !sources.length) return '';
+  return sources.map(s => {
+    const cls = s.ok ? 'ok' : 'fail';
+    const label = SOURCE_LABELS[s.name] || s.name;
+    const count = s.count > 0 ? ` (${s.count})` : '';
+    return `<span class="status-badge ${cls}"><span class="dot"></span>${label}${count}</span>`;
+  }).join(' ');
+}
+
+// ── Display speech result ───────────────────────────────────
+function showSpeech(data) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('progressContainer').classList.remove('active');
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('panelsContainer').style.display = 'grid';
+
+  // Speech content
+  document.getElementById('speechContent').innerHTML = renderMarkdown(data.speech_part || '');
+
+  // Recommendations
+  document.getElementById('recsContent').innerHTML = renderRecommendations(data.recommendation_part || '');
+
+  // Model badge
+  if (data.model) {
+    document.getElementById('modelBadge').textContent = `Model: ${data.model}`;
+  }
+
+  // Status bar
+  if (data.sources_used) {
+    document.getElementById('statusBar').style.display = 'flex';
+    document.getElementById('sourcesBadges').innerHTML = renderSourceBadges(data.sources_used);
+  }
+  if (data.timestamp) {
+    const ts = new Date(data.timestamp);
+    document.getElementById('statusTimestamp').textContent =
+      `生成于 ${ts.getHours().toString().padStart(2,'0')}:${ts.getMinutes().toString().padStart(2,'0')}`;
+  }
+
+  // Re-enable button
+  const btn = document.getElementById('genBtn');
+  btn.disabled = false;
+  btn.classList.remove('loading');
+  btn.textContent = '🔄 重新生成';
+}
+
+// ── Show error ──────────────────────────────────────────────
+function showError(msg) {
+  document.getElementById('progressContainer').classList.remove('active');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('panelsContainer').style.display = 'none';
+  document.getElementById('errorBox').style.display = 'block';
+  document.getElementById('errorText').textContent = msg;
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled = false;
+  btn.classList.remove('loading');
+  btn.textContent = '⚡ 生成今日早会';
+}
+
+// ── Poll generation status ──────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/speech/status');
+      const status = await r.json();
+      if (status.phase) {
+        const phases = {
+          'starting': '🚀 启动中...',
+          'collecting data': '📡 采集数据中 (新闻、X、Telegram、Polymarket...)',
+          'analyzing book': '📊 分析Book持仓 (Greeks、Strikes、Cross Gamma...)',
+          'building prompt': '🏗️ 构建AI提示词...',
+          'generating with AI (claude-sonnet-4.6)': '🤖 Claude Sonnet 4.6 正在生成早会发言... (约30-120秒)',
+          'generating with AI': '🤖 AI正在生成早会发言... (约30-60秒)',
+          'parsing response': '📝 解析生成结果...',
+          'done': '✅ 完成!',
+          'failed': '❌ 生成失败',
+          'error': '❌ 发生错误',
+        };
+        document.getElementById('progressPhase').textContent = phases[status.phase] || status.phase;
+      }
+      if (!status.in_progress) {
+        stopPolling();
+        // Generation finished — check if successful
+        if (status.phase === 'done') {
+          // Fetch the result
+          const result = await fetch('/api/speech/latest');
+          const data = await result.json();
+          if (data.ok) {
+            showSpeech(data);
+          } else {
+            showError('生成完成但获取结果失败');
+          }
+        } else if (status.error) {
+          showError(status.error);
+        }
+      }
+    } catch(e) { /* ignore */ }
+  }, 2000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ── Generate speech ─────────────────────────────────────────
+async function generateSpeech(force) {
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = '⏳ 生成中...';
+
+  // Show progress
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('panelsContainer').style.display = 'none';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('progressContainer').classList.add('active');
+  document.getElementById('progressPhase').textContent = '🚀 启动生成...';
+
+  try {
+    const url = '/api/speech/generate' + (force ? '?force=true' : '');
+    const r = await fetch(url, { method: 'POST' });
+    const data = await r.json();
+
+    if (data.speech_part) {
+      // Got cached result directly
+      showSpeech(data);
+      return;
+    }
+
+    if (!data.ok) {
+      showError(data.error || '触发生成失败');
+      return;
+    }
+
+    // Generation started in background — poll for completion
+    startPolling();
+
+  } catch (e) {
+    showError(`网络错误: ${e.message}`);
+  }
+}
+
+// ── Load cached speech on page load ─────────────────────────
+async function loadCached() {
+  try {
+    const r = await fetch('/api/speech/latest');
+    const data = await r.json();
+    if (data.ok) {
+      showSpeech(data);
+    }
+  } catch(e) { /* show empty state */ }
+}
+
+document.addEventListener('DOMContentLoaded', loadCached);
+</script>
+
+</body>
+</html>

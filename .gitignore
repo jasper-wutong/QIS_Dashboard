@@ -39,7 +39,10 @@ Thumbs.db
 coremail/param.json
 
 # HMC credentials (never commit!)
-hmc_token.txt
+hmc_database/hmc_token.txt
+
+# CICC Research cookies (never commit!)
+cicc_research/cicc_cookies.json
 
 # Downloads folder
 downloads/
@@ -47,3 +50,24 @@ coremail/downloads/
 
 # Memory / data cache
 memory/
+
+# Bloomberg (proprietary API helper & outputs, not for VCS)
+bloomberg/
+
+# Environment variables (API keys, secrets)
+.env
+.env.*
+
+# SQLite databases
+*.db
+
+# Ali Bailian cache files
+ali_bailian/.cloud_files_cache.json
+ali_bailian/.upload_history.json
+
+# Result/output text files
+_rt_result.txt
+
+# PDF files
+*.pdf
+bloomberg/

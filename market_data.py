@@ -580,8 +580,8 @@ def _fetch_wind_realtime_subprocess(wind_ticker):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _VENV_PYTHON = str(Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe")
-_BBG_HELPER = str(Path(__file__).resolve().parent / "bloomberg_helper.py")
-_HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_helper.py")
+_BBG_HELPER = str(Path(__file__).resolve().parent / "bloomberg" / "bloomberg_helper.py")
+_HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_database" / "hmc_helper.py")
 _HMC_EARLIEST = "2010-01-01"  # HMC 历史数据起点 (全量拉取)
 
 
@@ -1045,12 +1045,25 @@ def _fetch_and_store(ticker, start_date, end_date, region, underlying=""):
     if _hmc_ok_with_data:
         print("[MARKET_DATA] HMC 成功: {} ({} 行)".format(ticker, len(raw.get("ohlcv", []))))
     elif _hmc_ok_empty:
-        # HMC 可达但此区间无数据: 记录“已搜索到 start_date”哨兵 — 无需 Wind 回退
-        print("[MARKET_DATA] HMC {} 范围内无数据 ({} ~ {}), 记录哨兵".format(ticker, start_date, end_date))
-        old_first, old_last = _db_get_date_range(ticker)
-        if old_first and old_last:
-            _db_update_meta(ticker, "hmc", min(start_date, old_first), old_last)
-        return raw  # ok=True, ohlcv=[]; 下游会读取现有 DB 数据
+        if _is_domestic(ticker):
+            # 境内: HMC 无数据 → 记录哨兵, 无需继续
+            print("[MARKET_DATA] HMC {} 范围内无数据 ({} ~ {}), 记录哨兵".format(ticker, start_date, end_date))
+            old_first, old_last = _db_get_date_range(ticker)
+            if old_first and old_last:
+                _db_update_meta(ticker, "hmc", min(start_date, old_first), old_last)
+            return raw  # ok=True, ohlcv=[]; 下游会读取现有 DB 数据
+        else:
+            # 境外: HMC 无数据 → Bloomberg 回退
+            from ticker_mapping import resolve_bbg_ticker as _rtbbg
+            _bbg_code = None
+            if underlying and (" Index" in underlying or " Comdty" in underlying):
+                _bbg_code = underlying
+            if not _bbg_code:
+                _bbg_code = _rtbbg(ticker)
+            if not _bbg_code:
+                return {"ok": False, "error": "无法将 {} 映射为 Bloomberg ticker".format(ticker)}
+            print("[MARKET_DATA] HMC 无数据 → BBG 回退: {} → {}".format(ticker, _bbg_code))
+            raw = _fetch_bloomberg(_bbg_code, start_date, end_date)
     else:
         hmc_err = raw.get("error", "未知错误")
         print("[MARKET_DATA] HMC 失败 ({}), 回退: {}".format(hmc_err[:80], ticker))

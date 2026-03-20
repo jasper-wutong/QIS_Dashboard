@@ -62,6 +62,7 @@
   <span class="nav-title">&#x1F4CA; QIS Analysis</span>
   <a href="/" class="btn">&#x1F3E0; Dashboard</a>
   <a href="/qis-book" class="btn">&#x1F4DA; QIS Book</a>
+  <a href="/morning-meeting" class="btn">&#x1F399;&#xFE0F; 早会</a>
   <div class="nav-right">
     <span id="loading-indicator">&#x23F3; Loading&hellip;</span>
     <span class="last-update">Updated: {{ now_time }}</span>
@@ -134,50 +135,84 @@
     </div>
   </div>
 
-  <!-- SECTION 4: Cross Gamma -->
+  <!-- SECTION 4: Cross Gamma (Book-Level) -->
   <div class="section-card">
     <div class="section-header">
-      <h2>&#x1F30D; Cross Gamma Matrix</h2>
+      <h2>&#x1F30D; QIS Book Cross Gamma</h2>
       <div class="controls">
-        <label>View:</label>
-        <select id="cg-mode" onchange="renderCrossGamma()">
-          <option value="pct">% Gamma (per 1% move)</option>
-          <option value="cash">Cash Gamma (CNY/USD)</option>
+        <label>Threshold:</label>
+        <select id="cg-threshold" onchange="renderCrossGamma()">
+          <option value="0">Show all</option>
+          <option value="1000" selected>|&gamma;| &gt; 0.1万</option>
+          <option value="10000">|&gamma;| &gt; 1万</option>
+          <option value="100000">|&gamma;| &gt; 10万</option>
+          <option value="1000000">|&gamma;| &gt; 100万</option>
         </select>
         <label style="margin-left:12px">Diagonal:</label>
         <select id="cg-diag" onchange="renderCrossGamma()">
-          <option value="show">Show own gamma</option>
-          <option value="hide" selected>Hide (off-diag only)</option>
+          <option value="hide" selected>Hide diagonal</option>
+          <option value="show">Show diagonal</option>
         </select>
       </div>
     </div>
     <div class="section-body">
       <div class="stat-strip">
-        <div class="stat-card"><div class="stat-label">Trade ID</div><div class="stat-value accent" id="s4-trade">&#x2014;</div></div>
         <div class="stat-card"><div class="stat-label">Date</div><div class="stat-value yellow" id="s4-date">&#x2014;</div></div>
-        <div class="stat-card"><div class="stat-label">TV</div><div class="stat-value green" id="s4-tv">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Active Trades</div><div class="stat-value accent" id="s4-trades">&#x2014;</div></div>
         <div class="stat-card"><div class="stat-label">Underlyings</div><div class="stat-value purple" id="s4-count">&#x2014;</div></div>
-        <div class="stat-card"><div class="stat-label">Spots Fetched</div><div class="stat-value accent" id="s4-spots">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Total Cross &gamma;</div><div class="stat-value" id="s4-total">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Currency</div><div class="stat-value accent" id="s4-ccy">CNY</div></div>
       </div>
       <div id="s4-error" class="error-msg" style="display:none"></div>
       <!-- Heatmap container -->
       <div id="cg-heatmap-wrap" style="overflow-x:auto;margin-top:8px"></div>
 
-      <!-- Delta & Gamma bar (dual) -->
+      <!-- Per-asset gamma exposure -->
       <div style="margin-top:24px">
-        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:8px">Own Gamma (diagonal, % of TV per 1%&sup2;)</h3>
-        <div style="position:relative;height:220px">
+        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:8px">Per-Asset Cross Gamma Exposure (CNY)</h3>
+        <div style="position:relative;height:320px">
           <canvas id="chart-cg-gamma"></canvas>
         </div>
       </div>
 
       <!-- Top pairs bar -->
       <div style="margin-top:24px">
-        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:8px">Top 20 Cross Gamma Pairs</h3>
-        <div style="position:relative;height:420px">
+        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:8px">Top Cross Gamma Pairs (CNY)</h3>
+        <div style="position:relative;height:520px">
           <canvas id="chart-cg-pairs"></canvas>
         </div>
       </div>
+
+      <!-- Trade contribution table -->
+      <div style="margin-top:24px">
+        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:8px">Trade Contribution Breakdown</h3>
+        <div id="cg-trade-table-wrap" style="overflow-x:auto;max-height:440px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: PDE Scenario Ladder -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2>&#x1F4CA; PDE Scenario Ladder</h2>
+      <span style="font-size:.8rem;color:var(--muted)">Book-level risk by spot bump scenario &middot; rows = spot shock &middot; cols = risk type</span>
+      <div class="controls" style="margin-left:auto">
+        <label>View:</label>
+        <select id="pde-view" onchange="renderPdeLadder()">
+          <option value="book" selected>Whole Book</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="stat-strip">
+        <div class="stat-card"><div class="stat-label">Date</div><div class="stat-value yellow" id="s5-date">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Trade Count</div><div class="stat-value accent" id="s5-trades">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Reference TV</div><div class="stat-value green" id="s5-ref-tv">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">Worst TV (scenario)</div><div class="stat-value red" id="s5-worst">&#x2014;</div></div>
+        <div class="stat-card"><div class="stat-label">File</div><div class="stat-value" id="s5-file" style="font-size:.7rem;color:var(--muted)">&#x2014;</div></div>
+      </div>
+      <div id="s5-error" class="error-msg" style="display:none"></div>
+      <div id="pde-ladder-wrap" style="overflow-x:auto;margin-top:8px"></div>
     </div>
   </div>
 </main>
@@ -379,29 +414,40 @@ function renderGreeks(){
 }
 
 async function reloadAll(){
-  _timelineData=null; _contractsData=null;
+  _timelineData=null; _contractsData=null; _cgData=null; _pdeLadderData=null;
   if(chartTimeline){chartTimeline.destroy();chartTimeline=null;}
   if(chartBubble){chartBubble.destroy();chartBubble=null;}
   if(chartGreeks){chartGreeks.destroy();chartGreeks=null;}
-  ['s1-error','s2-error','s3-error','s4-error'].forEach(id=>document.getElementById(id).style.display='none');
+  if(chartCgGamma){chartCgGamma.destroy();chartCgGamma=null;}
+  if(chartCgPairs){chartCgPairs.destroy();chartCgPairs=null;}
+  ['s1-error','s2-error','s3-error','s4-error','s5-error'].forEach(id=>document.getElementById(id).style.display='none');
   await loadTimeline(); renderGreeks();
   await loadContracts();
   await loadCrossGamma();
+  await loadPdeLadder();
 }
 
-/* ===== SECTION 4: Cross Gamma ===== */
+/* ===== SECTION 4: Cross Gamma (Book-Level) ===== */
 let _cgData = null;
 let chartCgGamma = null, chartCgPairs = null;
 
-function fmtPct(v){ if(v===null||v===undefined||isNaN(v))return '\u2014'; return (v*100).toFixed(2)+'%'; }
-function fmtCash(v){
+function fmtCNY(v){
   if(v===null||v===undefined||isNaN(v))return '\u2014';
   const a=Math.abs(v);
   if(a>=1e8) return (v/1e8).toFixed(2)+'\u4ebf';
-  if(a>=1e4) return (v/1e4).toFixed(1)+'\u4e07';
-  if(a>=1)   return v.toFixed(1);
-  return v.toFixed(4);
+  if(a>=1e4) return (v/1e4).toFixed(0)+'\u4e07';
+  if(a>=1)   return v.toFixed(0);
+  return v.toFixed(2);
 }
+
+const _CLASS_COLORS = {
+  'Index':     {bg:'rgba(88,166,255,0.55)',  border:'rgba(88,166,255,0.9)'},
+  'Bond':      {bg:'rgba(63,185,80,0.55)',   border:'rgba(63,185,80,0.9)'},
+  'Commodity': {bg:'rgba(210,153,34,0.55)',  border:'rgba(210,153,34,0.9)'},
+  'ETF':       {bg:'rgba(188,140,255,0.55)', border:'rgba(188,140,255,0.9)'},
+  'FX':        {bg:'rgba(248,81,73,0.55)',   border:'rgba(248,81,73,0.9)'},
+  'Other':     {bg:'rgba(139,148,158,0.55)', border:'rgba(139,148,158,0.9)'},
+};
 
 async function loadCrossGamma(){
   setLoading(true);
@@ -410,87 +456,131 @@ async function loadCrossGamma(){
     const data=await r.json();
     if(!data.ok) throw new Error(data.error||'Unknown error');
     _cgData=data;
-    document.getElementById('s4-trade').textContent=data.trade_id||'\u2014';
-    document.getElementById('s4-date').textContent=data.timestamp||'\u2014';
-    document.getElementById('s4-tv').textContent=(data.tv*100).toFixed(2)+'%';
-    document.getElementById('s4-count').textContent=data.labels.length;
-    document.getElementById('s4-spots').textContent=Object.keys(data.spots).length+'/'+data.labels.length;
+    document.getElementById('s4-date').textContent=data.date||'\u2014';
+    document.getElementById('s4-trades').textContent=data.active_trades+'/'+data.total_trades;
+    document.getElementById('s4-count').textContent=data.n_underlyings;
+    const tg=data.total_gamma;
+    const el=document.getElementById('s4-total');
+    el.textContent=fmtCNY(tg);
+    el.className='stat-value '+(tg>=0?'green':'red');
+    document.getElementById('s4-ccy').textContent=data.currency||'CNY';
     renderCrossGamma();
     renderCgBars();
     renderCgPairs();
+    renderTradeTable();
   }catch(e){
     const el=document.getElementById('s4-error'); el.textContent='\u26a0 '+e.message; el.style.display='block';
   }finally{ setLoading(false); }
 }
 
-function heatColor(val, maxVal, isDiag){
-  if(val===0 && isDiag) return 'transparent';
+function heatColor(val, maxVal){
   if(maxVal===0) return 'rgba(88,166,255,0.05)';
   const ratio = Math.min(Math.abs(val)/maxVal, 1);
-  // warm gradient: low=dark blue, high=bright red
-  const r = Math.round(30 + 225*ratio);
-  const g = Math.round(60 + 140*(1-ratio)*ratio*2);
-  const b = Math.round(120*(1-ratio));
-  return `rgba(${r},${g},${b},${0.25+0.65*ratio})`;
+  if(val < 0){
+    // Negative: blue shades (cold)
+    const r = Math.round(30 + 40*ratio);
+    const g = Math.round(60 + 80*(1-ratio)*ratio*2);
+    const b = Math.round(120 + 135*ratio);
+    return `rgba(${r},${g},${b},${0.2+0.7*ratio})`;
+  } else {
+    // Positive: red/orange shades (warm)
+    const r = Math.round(60 + 195*ratio);
+    const g = Math.round(80 + 100*(1-ratio)*ratio*2);
+    const b = Math.round(40*(1-ratio));
+    return `rgba(${r},${g},${b},${0.2+0.7*ratio})`;
+  }
 }
 
 function renderCrossGamma(){
   if(!_cgData) return;
-  const mode = document.getElementById('cg-mode').value; // 'pct' or 'cash'
   const showDiag = document.getElementById('cg-diag').value === 'show';
-  const labels = _cgData.labels;
-  const n = labels.length;
-  const mat = mode==='cash' ? _cgData.cash_matrix : _cgData.pct_matrix;
-  const isCash = mode==='cash';
+  const threshold = parseFloat(document.getElementById('cg-threshold').value)||0;
+  const tickers = _cgData.tickers;
+  const classes = _cgData.asset_classes;
+  const n = tickers.length;
+  const mat = _cgData.matrix;
 
   // Find max off-diagonal for color scaling
   let maxOff = 0;
   for(let i=0;i<n;i++) for(let j=0;j<n;j++) if(i!==j) maxOff=Math.max(maxOff, Math.abs(mat[i][j]));
-  let maxDiag = 0;
-  for(let i=0;i<n;i++) maxDiag=Math.max(maxDiag, Math.abs(mat[i][i]));
-  const maxAll = showDiag ? Math.max(maxOff, maxDiag) : maxOff;
+
+  // Class divider — detect where asset class changes for visual grouping
+  const classBreaks = new Set();
+  for(let i=1;i<n;i++) if(classes[i]!==classes[i-1]) classBreaks.add(i);
 
   let html = '<table class="heatmap-table"><thead><tr><th class="row-header"></th>';
-  for(const l of labels) html += `<th>${l}</th>`;
+  for(let j=0;j<n;j++){
+    const brk = classBreaks.has(j) ? 'border-left:2px solid var(--accent);' : '';
+    html += `<th style="${brk}">${tickers[j]}</th>`;
+  }
   html += '</tr></thead><tbody>';
   for(let i=0;i<n;i++){
-    html += `<tr><td class="row-header">${labels[i]}</td>`;
+    const rowBrk = classBreaks.has(i) ? 'border-top:2px solid var(--accent);' : '';
+    html += `<tr><td class="row-header" style="${rowBrk}">${tickers[i]}</td>`;
     for(let j=0;j<n;j++){
       const v = mat[i][j];
       const isDiag = i===j;
-      const displayVal = isDiag && !showDiag ? '' : (isCash ? fmtCash(v) : fmtPct(v));
-      const bg = isDiag && !showDiag ? 'rgba(48,54,61,0.3)' : heatColor(v, maxAll, false);
-      const cls = isDiag ? ' diag' : '';
-      const textColor = isDiag && showDiag ? '#fff' : '';
-      html += `<td class="${cls}" style="background:${bg};${textColor?'color:'+textColor:''}" title="${labels[i]} × ${labels[j]}: ${isCash?fmtCash(v):fmtPct(v)}">${displayVal}</td>`;
+      const belowThreshold = Math.abs(v) < threshold && !isDiag;
+      const brk = classBreaks.has(j) ? 'border-left:2px solid var(--accent);' : '';
+      if(isDiag && !showDiag){
+        html += `<td style="background:rgba(48,54,61,0.3);${rowBrk}${brk}" title="${tickers[i]} diagonal: ${fmtCNY(v)}"></td>`;
+      } else if(belowThreshold){
+        html += `<td style="background:transparent;${rowBrk}${brk}" title="${tickers[i]} × ${tickers[j]}: ${fmtCNY(v)}"></td>`;
+      } else {
+        const bg = heatColor(v, maxOff);
+        const displayVal = fmtCNY(v);
+        const cls = isDiag ? ' diag' : '';
+        html += `<td class="${cls}" style="background:${bg};${rowBrk}${brk}" title="${tickers[i]} × ${tickers[j]}: ${fmtCNY(v)}">${displayVal}</td>`;
+      }
     }
     html += '</tr>';
   }
   html += '</tbody></table>';
+
+  // Legend
+  html += '<div style="display:flex;gap:16px;margin-top:8px;font-size:.75rem;color:var(--muted)">';
+  html += '<span style="display:inline-block;width:14px;height:14px;background:rgba(70,100,255,0.7);border-radius:3px;vertical-align:middle"></span> Negative (Short Gamma)';
+  html += '<span style="margin-left:8px;display:inline-block;width:14px;height:14px;background:rgba(255,120,40,0.7);border-radius:3px;vertical-align:middle"></span> Positive (Long Gamma)';
+  html += '<span style="margin-left:16px">Values in CNY</span>';
+  html += '</div>';
+
   document.getElementById('cg-heatmap-wrap').innerHTML = html;
 }
 
 function renderCgBars(){
   if(!_cgData) return;
-  const labels = _cgData.labels;
-  const gammas = _cgData.gammas.map(g=>g*100); // convert to %
+  const pa = _cgData.per_asset;
+  const labels = pa.map(p=>p.ticker);
+  const values = pa.map(p=>p.row_gamma);
+  const classes = pa.map(p=>p.asset_class);
+  const bgColors = classes.map(c=>(_CLASS_COLORS[c]||_CLASS_COLORS['Other']).bg);
+  const bdColors = classes.map(c=>(_CLASS_COLORS[c]||_CLASS_COLORS['Other']).border);
 
   if(chartCgGamma) chartCgGamma.destroy();
-  chartCgGamma = new Chart(document.getElementById('chart-cg-gamma'),{
+  const height = Math.max(320, labels.length*22);
+  const canvas = document.getElementById('chart-cg-gamma');
+  canvas.parentElement.style.height = height+'px';
+
+  chartCgGamma = new Chart(canvas,{
     type:'bar',
     data:{labels, datasets:[{
-      label:'Own Gamma (%)',
-      data:gammas,
-      backgroundColor:gammas.map(v=>v>gammas.reduce((a,b)=>a+b,0)/gammas.length ? 'rgba(248,81,73,0.6)' : 'rgba(88,166,255,0.6)'),
-      borderColor:gammas.map(v=>v>gammas.reduce((a,b)=>a+b,0)/gammas.length ? 'rgba(248,81,73,0.9)' : 'rgba(88,166,255,0.9)'),
+      label:'Cross Gamma Exposure (CNY)',
+      data:values,
+      backgroundColor:bgColors,
+      borderColor:bdColors,
       borderWidth:1
     }]},
     options:{
+      indexAxis:'y',
       animation:false, responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y.toFixed(4)+'%'}}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>fmtCNY(ctx.parsed.x)}}
+      },
       scales:{
-        x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:45},grid:{color:'rgba(48,54,61,0.4)'}},
-        y:{title:{display:true,text:'Gamma (%)',color:'#58a6ff',font:{size:10}},ticks:{color:'#8b949e',callback:v=>v.toFixed(2)+'%'},grid:{color:'rgba(48,54,61,0.4)'}}
+        x:{title:{display:true,text:'Cross Gamma (CNY)',color:'#58a6ff',font:{size:10}},
+           ticks:{color:'#8b949e',callback:v=>fmtCNY(v)},grid:{color:'rgba(48,54,61,0.4)'}},
+        y:{ticks:{color:'#c9d1d9',font:{size:9}},grid:{color:'rgba(48,54,61,0.2)'}}
       }
     }
   });
@@ -498,20 +588,24 @@ function renderCgBars(){
 
 function renderCgPairs(){
   if(!_cgData) return;
-  const mode = document.getElementById('cg-mode').value;
-  const isCash = mode === 'cash';
-  const pairs = _cgData.top_pairs.slice(0, 20);
+  const pairs = _cgData.top_pairs.slice(0, 30);
   const pLabels = pairs.map(p=>p.a+' × '+p.b).reverse();
-  const pValues = pairs.map(p=>isCash ? p.cash_gamma : p.pct_gamma*100).reverse();
+  const pValues = pairs.map(p=>p.value).reverse();
+  const bgColors = pValues.map(v=>v<0 ? 'rgba(88,140,255,0.5)' : 'rgba(248,81,73,0.5)');
+  const bdColors = pValues.map(v=>v<0 ? 'rgba(88,140,255,0.9)' : 'rgba(248,81,73,0.9)');
 
   if(chartCgPairs) chartCgPairs.destroy();
-  chartCgPairs = new Chart(document.getElementById('chart-cg-pairs'),{
+  const height = Math.max(420, pairs.length*20);
+  const canvas = document.getElementById('chart-cg-pairs');
+  canvas.parentElement.style.height = height+'px';
+
+  chartCgPairs = new Chart(canvas,{
     type:'bar',
     data:{labels:pLabels, datasets:[{
-      label: isCash ? 'Cash Cross Gamma' : 'Cross Gamma (%)',
+      label:'Cash Cross Gamma (CNY)',
       data:pValues,
-      backgroundColor:'rgba(248,81,73,0.5)',
-      borderColor:'rgba(248,81,73,0.9)',
+      backgroundColor:bgColors,
+      borderColor:bdColors,
       borderWidth:1,
     }]},
     options:{
@@ -519,18 +613,175 @@ function renderCgPairs(){
       animation:false, responsive:true, maintainAspectRatio:false,
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:ctx=> isCash ? fmtCash(ctx.parsed.x) : ctx.parsed.x.toFixed(4)+'%'}}
+        tooltip:{callbacks:{label:ctx=>fmtCNY(ctx.parsed.x)}}
       },
       scales:{
-        x:{title:{display:true,text:isCash?'Cash Gamma':'Cross Gamma (%)',color:'#f85149',font:{size:10}},ticks:{color:'#8b949e',callback:v=>isCash?fmtCash(v):v.toFixed(2)+'%'},grid:{color:'rgba(48,54,61,0.4)'}},
+        x:{title:{display:true,text:'Cash Cross Gamma (CNY)',color:'#f85149',font:{size:10}},
+           ticks:{color:'#8b949e',callback:v=>fmtCNY(v)},grid:{color:'rgba(48,54,61,0.4)'}},
         y:{ticks:{color:'#c9d1d9',font:{size:9}},grid:{color:'rgba(48,54,61,0.2)'}}
       }
     }
   });
 }
 
+function renderTradeTable(){
+  if(!_cgData || !_cgData.trade_contribs) return;
+  const trades = _cgData.trade_contribs;
+  let html = '<table class="heatmap-table" style="font-size:.75rem;width:100%">';
+  html += '<thead><tr><th style="text-align:left;min-width:140px">Trade ID</th>';
+  html += '<th>Total |Cross &gamma;|</th>';
+  html += '<th>% of Book</th>';
+  html += '<th style="min-width:160px">Top Pair</th>';
+  html += '<th>Top Pair Value</th>';
+  html += '<th>Pairs</th></tr></thead><tbody>';
+
+  for(let i=0;i<trades.length;i++){
+    const t = trades[i];
+    const highlight = i < 5 ? 'color:var(--accent);font-weight:600' : '';
+    const barW = Math.min(t.pct_of_book, 100);
+    html += `<tr>`;
+    html += `<td style="text-align:left;${highlight}">${t.trade_id}</td>`;
+    html += `<td>${fmtCNY(t.total_abs)}</td>`;
+    html += `<td><div style="display:flex;align-items:center;gap:6px"><div style="width:60px;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${barW}%;height:100%;background:var(--accent);border-radius:4px"></div></div><span>${t.pct_of_book.toFixed(1)}%</span></div></td>`;
+    html += `<td>${t.top_pair}</td>`;
+    html += `<td style="${t.top_pair_value<0?'color:var(--red)':'color:var(--green)'}">${fmtCNY(t.top_pair_value)}</td>`;
+    html += `<td>${t.n_pairs}</td>`;
+    html += `</tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('cg-trade-table-wrap').innerHTML = html;
+}
+
+/* ===== SECTION 5: PDE Scenario Ladder ===== */
+let _pdeLadderData = null;
+
+async function loadPdeLadder(){
+  setLoading(true);
+  try{
+    const r=await fetch('/api/analysis/pde-ladder');
+    const data=await r.json();
+    if(!data.ok) throw new Error(data.error||'Unknown error');
+    _pdeLadderData=data;
+    document.getElementById('s5-date').textContent=data.date||'\u2014';
+    document.getElementById('s5-trades').textContent=data.trade_count;
+    document.getElementById('s5-file').textContent=data.file_name||'\u2014';
+
+    // Reference TV = scenario index 7 (reference), risk index 0 (tv)
+    const tvIdx=data.risks.indexOf('tv');
+    const refRow=data.matrix[7]; // reference row
+    if(tvIdx>=0 && refRow){
+      document.getElementById('s5-ref-tv').textContent=fmtCNY(refRow[tvIdx]);
+    }
+    // Worst TV scenario (min TV value)
+    if(tvIdx>=0){
+      let worstVal=Infinity, worstLabel='';
+      for(let i=0;i<data.scenarios.length;i++){
+        const v=data.matrix[i][tvIdx];
+        if(v<worstVal){ worstVal=v; worstLabel=data.scenarios[i]; }
+      }
+      const worstEl=document.getElementById('s5-worst');
+      worstEl.textContent=fmtCNY(worstVal)+' ('+worstLabel+')';
+    }
+
+    // Populate underlying selector
+    const sel=document.getElementById('pde-view');
+    while(sel.options.length>1) sel.remove(1);
+    if(data.per_underlying){
+      const unds=Object.keys(data.per_underlying).sort();
+      for(const u of unds){
+        const opt=document.createElement('option');
+        opt.value=u; opt.textContent=u;
+        sel.appendChild(opt);
+      }
+    }
+    renderPdeLadder();
+  }catch(e){
+    const el=document.getElementById('s5-error'); el.textContent='\u26a0 '+e.message; el.style.display='block';
+  }finally{ setLoading(false); }
+}
+
+function pdeCellColor(val, colMin, colMax){
+  // Color scale normalized per column (risk type)
+  const range=Math.max(Math.abs(colMin), Math.abs(colMax), 1);
+  const ratio=Math.min(Math.abs(val)/range, 1);
+  if(val<0){
+    // Blue-purple for negative
+    const r=Math.round(30+40*ratio);
+    const g=Math.round(60+60*(1-ratio)*ratio*2);
+    const b=Math.round(120+135*ratio);
+    return `rgba(${r},${g},${b},${0.15+0.65*ratio})`;
+  } else {
+    // Orange-green for positive
+    const r=Math.round(60+180*ratio);
+    const g=Math.round(100+80*(1-ratio)*ratio*2);
+    const b=Math.round(30*(1-ratio));
+    return `rgba(${r},${g},${b},${0.15+0.65*ratio})`;
+  }
+}
+
+function renderPdeLadder(){
+  if(!_pdeLadderData) return;
+  const data=_pdeLadderData;
+  const viewMode=document.getElementById('pde-view').value;
+
+  let matrix=data.matrix; // default: whole book
+  let risks=data.risks;
+  let scenarios=data.scenarios;
+
+  // If a specific underlying is selected, build its matrix
+  if(viewMode!=='book' && data.per_underlying && data.per_underlying[viewMode]){
+    const undData=data.per_underlying[viewMode];
+    matrix=[];
+    for(let si=0;si<scenarios.length;si++){
+      const row=[];
+      for(const rk of risks){
+        row.push(undData[rk] ? undData[rk][si] : 0);
+      }
+      matrix.push(row);
+    }
+  }
+
+  // Compute per-column min/max for color scaling
+  const colMin=risks.map((_,ci)=>Math.min(...matrix.map(row=>row[ci]||0)));
+  const colMax=risks.map((_,ci)=>Math.max(...matrix.map(row=>row[ci]||0)));
+
+  // Build table
+  let html='<table class="heatmap-table" style="font-size:.78rem">';
+  html+='<thead><tr><th class="row-header" style="min-width:80px">Scenario</th>';
+  for(const rk of risks){
+    html+=`<th style="min-width:90px">${rk.toUpperCase()}</th>`;
+  }
+  html+='</tr></thead><tbody>';
+
+  for(let si=0;si<scenarios.length;si++){
+    const isRef=(scenarios[si]==='reference');
+    const rowStyle=isRef?'border-top:2px solid var(--accent);border-bottom:2px solid var(--accent);':''; 
+    const labelStyle=isRef?'color:var(--accent);font-weight:700':'color:var(--muted);font-weight:600';
+    html+=`<tr style="${rowStyle}">`;
+    html+=`<td class="row-header" style="${labelStyle}">${scenarios[si]}</td>`;
+    for(let ci=0;ci<risks.length;ci++){
+      const v=matrix[si]?matrix[si][ci]:0;
+      const bg=pdeCellColor(v, colMin[ci], colMax[ci]);
+      const textColor=v<0?'color:#8cb4ff':'color:#f0a060';
+      const refHighlight=isRef?'font-weight:700;':'';
+      html+=`<td style="background:${bg};${textColor};${refHighlight}" title="${scenarios[si]} / ${risks[ci]}: ${v.toFixed(2)}">${fmtCNY(v)}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</tbody></table>';
+
+  // Legend
+  html+='<div style="display:flex;gap:16px;margin-top:8px;font-size:.75rem;color:var(--muted)">';
+  html+='<span><span style="display:inline-block;width:14px;height:14px;background:rgba(70,100,255,0.7);border-radius:3px;vertical-align:middle"></span> Negative</span>';
+  html+='<span style="margin-left:8px"><span style="display:inline-block;width:14px;height:14px;background:rgba(240,160,60,0.7);border-radius:3px;vertical-align:middle"></span> Positive</span>';
+  html+='<span style="margin-left:16px">Scenario: +20% = spot up 20% · reference = current spot · -20% = spot down 20%</span>';
+  html+='</div>';
+
+  document.getElementById('pde-ladder-wrap').innerHTML=html;
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
-  Promise.all([loadTimeline().then(()=>renderGreeks()), loadContracts(), loadCrossGamma()]);
+  Promise.all([loadTimeline().then(()=>renderGreeks()), loadContracts(), loadCrossGamma(), loadPdeLadder()]);
 });
 </script>
 </body>

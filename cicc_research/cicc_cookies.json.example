@@ -1,0 +1,12 @@
+{
+  "_comment": "CICC Research Cookies - 请替换为实际的 cookies 值",
+  "_instructions": [
+    "方法一: 安装 Chrome 扩展 Cookie-Editor，登录 research.cicc.com 后点击 Export → JSON，",
+    "        将整个 JSON 数组粘贴替换此文件内容。",
+    "方法二: 在浏览器 F12 Console 中运行 document.cookie，复制完整 cookie 字符串，",
+    "        然后通过 /cicc-research 页面的前端界面粘贴保存。",
+    "方法三: 在 F12 → Application → Cookies 中手动复制关键 cookies 到下方。"
+  ],
+  "token": "your_token_here",
+  "session_id": "your_session_id_here"
+}

@@ -13,6 +13,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import jinja2
 import pandas as pd
 from flask import Flask, jsonify, request, render_template
 from ticker_mapping import populate_names, resolve_sector, resolve_region, resolve_instrument_type, SECTOR_ORDER, SECTOR_ICONS, resolve_name_to_wind_ticker
@@ -29,8 +30,32 @@ from market_data import fetch_market_data, clear_cache as clear_market_cache, db
 # 导入大宗商品研究模块
 from commodity_research import build_research_panel, get_sector_for_ticker, get_term_structure_tickers
 
+# 导入中金研究模块
+from cicc_research import (
+    fetch_report_list as cicc_report_list,
+    fetch_report_detail as cicc_report_detail,
+    search_reports as cicc_search_reports,
+    test_connection as cicc_test_connection,
+    save_cookies as cicc_save_cookies,
+    get_cookies_status as cicc_cookies_status,
+    clear_cache as cicc_clear_cache,
+    get_categories as cicc_get_categories,
+)
+
+# 导入早会发言模块
+from speech import generate_morning_speech, get_cached_speech
+from speech.generator import get_generation_status
+
+# 导入PDE Scenario Ladder模块
+from pde_ladder.loader import find_latest_qis_file, load_pde_ladder, SCENARIO_LABELS
+
 # -- Flask app -----------------------------------------------------------------
 app = Flask(__name__)
+# 支持子模块自带的 templates 目录（如 cicc_research/templates/）
+app.jinja_loader = jinja2.ChoiceLoader([
+    app.jinja_loader,
+    jinja2.FileSystemLoader(os.path.join(os.path.dirname(__file__), "cicc_research", "templates")),
+])
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -493,204 +518,85 @@ def api_contracts_detail():
     })
 
 
-# -- Cross Gamma API -----------------------------------------------------------
+# -- Cross Gamma API (book-level, daily JSON) ----------------------------------
 
-# BBG ticker → friendly name mapping (for cross gamma data)
-_CG_SHORT_NAMES = {
-    "000688\u00b7SH": "科创50 ETF",
-    "ACK26 Comdty": "铝 ACK26",
-    "AEK26 Comdty": "铝 AEK26",
-    "AUAM26 Comdty": "黄金 AU",
-    "COK6 Comdty": "布油 COK6",
-    "COM6 Comdty": "布油 COM6",
-    "CUK26 Comdty": "铜 CU",
-    "DMH6 Index": "DAX Mini",
-    "FFDH26 Index": "FTSE",
-    "IFBH26 Index": "沪深300 IF",
-    "NQH6 Index": "纳指 NQ",
-    "SZ399006 Index": "创业板指",
-    "TFCM26 Comdty": "国债 TFC",
-    "TFTM26 Comdty": "国债 TFT",
-    "TYM6 Comdty": "美债 TY",
-}
-
-# BBG ticker → Wind ticker for spot price fetching
-_CG_BBG_TO_WIND = {
-    "000688\u00b7SH": "588000.SH",        # 科创50 ETF
-    "ACK26 Comdty": "AL2605.SHF",         # 铝
-    "AEK26 Comdty": "AL2611.SHF",         # 铝 (far month)
-    "AUAM26 Comdty": "AU2606.SHF",        # 黄金
-    "COK6 Comdty": "COK6 Comdty",         # ICE Brent (Bloomberg)
-    "COM6 Comdty": "COM6 Comdty",         # ICE Brent (Bloomberg)
-    "CUK26 Comdty": "CU2605.SHF",         # 铜
-    "DMH6 Index": "DMH6 Index",           # DAX Mini (Bloomberg)
-    "FFDH26 Index": "FFDH26 Index",       # FTSE (Bloomberg)
-    "IFBH26 Index": "IF2603.CFE",         # 沪深300 IF
-    "NQH6 Index": "NQH6 Index",           # 纳指 NQ (Bloomberg)
-    "SZ399006 Index": "399006.SZ",        # 创业板指
-    "TFCM26 Comdty": "TF2606.CFE",        # 国债期货 TF
-    "TFTM26 Comdty": "TF2609.CFE",        # 国债期货 TF (far month)
-    "TYM6 Comdty": "TYM6 Comdty",         # 美债 (Bloomberg)
-}
-
-
-def _parse_cross_gamma_data():
-    """Parse cross_gamma_data.txt and return structured output."""
-    import re as _re
-    cg_file = Path(__file__).resolve().parent / "cross_gamma" / "cross_gamma_data.txt"
-    if not cg_file.exists():
-        return None, "cross_gamma_data.txt not found"
-
-    raw = cg_file.read_text(encoding="utf-8")
-    raw = _re.sub(r'/\*\*.*?\*/', '', raw, flags=_re.DOTALL).strip()
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        return None, f"JSON parse error: {e}"
-
-    return data, None
-
-
-def _cg_sort_key(t):
-    if "Index" in t:
-        return (0, t)
-    if "Comdty" in t:
-        return (1, t)
-    return (2, t)
+from cross_gamma import find_latest_file, find_all_files, load_cross_gamma_data, aggregate_book
 
 
 @app.route("/api/analysis/cross-gamma")
 def api_cross_gamma():
-    """Cross Gamma matrix + cash gamma (with spot prices)."""
-    data, err = _parse_cross_gamma_data()
+    """Book-level Cross Gamma matrix (pre-computed cash gamma in CNY).
+
+    Iterates through available daily files (newest first) and skips files
+    that contain no active trades (e.g. placeholder files with all-zero
+    values) so the dashboard always shows the most recent *real* data.
+    """
+    candidates = find_all_files()
+    if not candidates:
+        return jsonify({"ok": False, "error": "No cross gamma JSON files found (network share unreachable, no local copy)"})
+
+    # Try each candidate (newest first); skip files with no active trades
+    last_error = None
+    for date_str, fpath in candidates:
+        raw_data, err = load_cross_gamma_data(fpath)
+        if err:
+            last_error = err
+            print(f"[CROSS_GAMMA] skip {fpath.name}: {err}")
+            continue
+
+        result = aggregate_book(raw_data)
+        stats = result["stats"]
+
+        if stats["active_trades"] == 0:
+            print(f"[CROSS_GAMMA] skip {fpath.name}: 0 active trades out of {stats['total_trades']}")
+            continue
+
+        print(f"[CROSS_GAMMA] date={date_str}  trades={stats['active_trades']}/{stats['total_trades']}  "
+              f"underlyings={stats['n_underlyings']}  file={fpath.name}")
+
+        return jsonify({
+            "ok":              True,
+            "date":            date_str,
+            "currency":        "CNY",
+            "tickers":         result["tickers"],
+            "asset_classes":   result["asset_classes"],
+            "matrix":          result["matrix"],
+            "top_pairs":       result["top_pairs"],
+            "trade_contribs":  result["trade_contribs"],
+            "per_asset":       result["per_asset"],
+            "total_trades":    stats["total_trades"],
+            "active_trades":   stats["active_trades"],
+            "n_underlyings":   stats["n_underlyings"],
+            "total_gamma":     stats["total_gamma"],
+            "total_abs_gamma": stats["total_abs_gamma"],
+        })
+
+    # All candidates exhausted
+    return jsonify({"ok": False, "error": last_error or "All cross gamma files contain no active trades"})
+
+
+# -- PDE Scenario Ladder -------------------------------------------------------
+
+@app.route("/api/analysis/pde-ladder")
+def api_pde_ladder():
+    """PDE scenario ladder: book-level aggregated risks by spot bump.
+
+    Reads the latest SPOT_LADDER_pde_QIS_*_raw_results.xlsx,
+    sums each scenario column across all trades per sheet (risk type),
+    and returns a matrix of scenarios × risks.
+    """
+    filepath, meta = find_latest_qis_file()
+    if filepath is None:
+        return jsonify({"ok": False, "error": meta})
+
+    result, err = load_pde_ladder(filepath)
     if err:
         return jsonify({"ok": False, "error": err})
 
-    vo = data["valuation_output"]
-    tv = vo.get("tv", 0)
-    trade_id = data.get("trade_id", "")
-    timestamp = data.get("data_timestamp", "")[:10]
+    print(f"[PDE_LADDER] date={result['date']}  trades={result['trade_count']}  "
+          f"risks={result['risks']}  file={result['file_name']}")
 
-    # Collect tickers (excluding basket ticker TLMAT3C)
-    tickers_set = set()
-    for k in vo:
-        if k.startswith("cross_gamma[") and not k.startswith("cross_gammaN"):
-            pair = k.replace("cross_gamma[", "").rstrip("]")
-            if "," in pair:
-                a, b = pair.split(",")
-                tickers_set.add(a.strip())
-                tickers_set.add(b.strip())
-
-    tickers = sorted(tickers_set, key=_cg_sort_key)
-    n = len(tickers)
-    idx_map = {t: i for i, t in enumerate(tickers)}
-    labels = [_CG_SHORT_NAMES.get(t, t) for t in tickers]
-
-    # Build pct gamma matrix
-    pct_matrix = [[0.0] * n for _ in range(n)]
-    for i, t in enumerate(tickers):
-        pct_matrix[i][i] = vo.get(f"gamma[{t}]", 0)
-    for k, v in vo.items():
-        if not k.startswith("cross_gamma[") or k.startswith("cross_gammaN"):
-            continue
-        inner = k[12:-1]
-        if "," not in inner:
-            continue
-        a, b = [x.strip() for x in inner.split(",")]
-        if a in idx_map and b in idx_map:
-            i, j = idx_map[a], idx_map[b]
-            pct_matrix[i][j] = v
-            pct_matrix[j][i] = v
-
-    # Delta and gamma vectors
-    deltas = [vo.get(f"delta[{t}]", 0) for t in tickers]
-    gammas = [vo.get(f"gamma[{t}]", 0) for t in tickers]
-
-    # Fetch spot prices in parallel (HMC/Wind/Bloomberg can be slow)
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    spots = {}
-    spot_errors = []
-
-    def _fetch_one_spot(bbg_t):
-        """Return (bbg_t, price_or_None, error_or_None)."""
-        wind_t = _CG_BBG_TO_WIND.get(bbg_t, bbg_t)
-        try:
-            rt = fetch_realtime_price(wind_ticker=wind_t, name="")
-            if rt.get("ok") and rt.get("price"):
-                return bbg_t, float(rt["price"]), None
-            # Fallback: try fetch_market_data for latest close
-            try:
-                md = fetch_market_data(wind_ticker=wind_t, name="", days=5)
-                if md.get("ok") and md.get("ohlcv"):
-                    close_val = md["ohlcv"][-1].get("close")
-                    if close_val is not None:
-                        return bbg_t, float(close_val), None
-                return bbg_t, None, f"{bbg_t}: no price"
-            except Exception:
-                return bbg_t, None, f"{bbg_t}: market data fallback failed"
-        except Exception as e:
-            return bbg_t, None, f"{bbg_t}: {e}"
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(_fetch_one_spot, t): t for t in tickers}
-        for fut in as_completed(futures, timeout=60):
-            try:
-                bbg_t, price, err = fut.result(timeout=30)
-                if price is not None:
-                    spots[bbg_t] = price
-                elif err:
-                    spot_errors.append(err)
-            except Exception as e:
-                spot_errors.append(f"{futures[fut]}: timeout/error {e}")
-
-    print(f"[CROSS_GAMMA] Spot prices fetched: {len(spots)}/{n}, errors: {spot_errors[:3]}")
-
-    # Build cash gamma matrix: CashGamma[i,j] = pct_gamma[i,j] * TV * S_i * S_j / 10000
-    cash_matrix = [[0.0] * n for _ in range(n)]
-    spot_list = [spots.get(t, 0) for t in tickers]
-    has_cash = len(spots) > 0
-    for i in range(n):
-        for j in range(n):
-            si, sj = spot_list[i], spot_list[j]
-            if si > 0 and sj > 0 and tv > 0:
-                cash_matrix[i][j] = pct_matrix[i][j] * tv * si * sj / 10000.0
-
-    # Top cross gamma pairs
-    pairs = []
-    for k in vo:
-        if not k.startswith("cross_gamma[") or k.startswith("cross_gammaN"):
-            continue
-        inner = k[12:-1]
-        if "," not in inner:
-            continue
-        a, b = [x.strip() for x in inner.split(",")]
-        la = _CG_SHORT_NAMES.get(a, a)
-        lb = _CG_SHORT_NAMES.get(b, b)
-        v = vo[k]
-        # cash value
-        sa, sb = spots.get(a, 0), spots.get(b, 0)
-        cv = v * tv * sa * sb / 10000.0 if (sa > 0 and sb > 0 and tv > 0) else 0
-        pairs.append({"a": la, "b": lb, "pct_gamma": v, "cash_gamma": cv})
-    pairs.sort(key=lambda x: -abs(x["pct_gamma"]))
-
-    return jsonify({
-        "ok": True,
-        "trade_id": trade_id,
-        "timestamp": timestamp,
-        "tv": tv,
-        "tickers": tickers,
-        "labels": labels,
-        "pct_matrix": pct_matrix,
-        "cash_matrix": cash_matrix,
-        "has_cash": has_cash,
-        "spots": {_CG_SHORT_NAMES.get(k, k): v for k, v in spots.items()},
-        "spot_list": spot_list,
-        "deltas": deltas,
-        "gammas": gammas,
-        "top_pairs": pairs[:20],
-        "spot_errors": spot_errors[:5],
-    })
+    return jsonify({"ok": True, **result})
 
 
 # -- QIS BOOK routes -----------------------------------------------------------
@@ -723,7 +629,7 @@ _QIS_INDEX_CACHE = {}  # {name: result}
 
 def _fetch_qis_index_from_hmc(index_name, start_date, end_date):
     """尝试从 HMC 获取 QIS 指数历史数据。"""
-    _HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_helper.py")
+    _HMC_HELPER = str(Path(__file__).resolve().parent / "hmc_database" / "hmc_helper.py")
     _VENV_PY = str(Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe")
 
     if not os.path.isfile(_VENV_PY) or not os.path.isfile(_HMC_HELPER):
@@ -1456,6 +1362,176 @@ def api_term_structure():
             + (f" 首个错误: {errors[0]}" if errors else "")
         ) if not ok else None,
     })
+
+
+# -- Morning Meeting Speech routes ------------------------------------------------
+
+def _get_cross_gamma_result():
+    """Helper to fetch cross gamma data for speech module."""
+    try:
+        candidates = find_all_files()
+        for date_str_cg, fpath in (candidates or []):
+            raw_data, err = load_cross_gamma_data(fpath)
+            if err:
+                continue
+            result = aggregate_book(raw_data)
+            if result["stats"]["active_trades"] > 0:
+                return {
+                    "total_gamma": result["stats"]["total_gamma"],
+                    "total_abs_gamma": result["stats"]["total_abs_gamma"],
+                    "active_trades": result["stats"]["active_trades"],
+                    "n_underlyings": result["stats"]["n_underlyings"],
+                    "top_pairs": result["top_pairs"],
+                    "per_asset": result["per_asset"],
+                }
+    except Exception as e:
+        print(f"[SPEECH] Cross gamma helper error: {e}")
+    return None
+
+
+@app.route("/morning-meeting")
+def morning_meeting_page():
+    """早会发言页面"""
+    return render_template(
+        "morning_meeting.html",
+        date_str=DATE_STR,
+        now_time=datetime.now().strftime("%H:%M"),
+    )
+
+
+@app.route("/api/speech/latest")
+def api_speech_latest():
+    """返回今日已缓存的早会发言（如有）。"""
+    cached = get_cached_speech()
+    if cached:
+        return jsonify(cached)
+    return jsonify({"ok": False, "error": "今日尚未生成早会发言"})
+
+
+@app.route("/api/speech/generate", methods=["POST"])
+def api_speech_generate():
+    """触发早会发言生成（后台线程执行，立即返回）。"""
+    force = request.args.get("force", "false").lower() == "true"
+    try:
+        result = generate_morning_speech(
+            app_data=DATA,
+            contracts_fetcher=_fetch_qis_contracts,
+            cross_gamma_fetcher=_get_cross_gamma_result,
+            force=force,
+        )
+        # If cached result was returned directly, it has speech_part
+        if result.get("speech_part"):
+            return jsonify(result)
+        # Otherwise it's an async trigger response
+        return jsonify(result)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/speech/status")
+def api_speech_status():
+    """返回当前生成状态。"""
+    return jsonify(get_generation_status())
+
+
+# -- CICC Research routes (API only, page replaced by morning meeting) ----------
+
+@app.route("/cicc-research")
+def cicc_research_page():
+    """中金研究院页面 — redirect to morning meeting"""
+    from flask import redirect
+    return redirect("/morning-meeting")
+
+
+@app.route("/api/cicc-research/reports")
+def api_cicc_reports():
+    """获取中金研究报告列表"""
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("pageSize", 20))
+    category = request.args.get("category", "")
+    category_id = int(request.args.get("categoryId", 0) or 0)
+    source = request.args.get("source", "hot")  # hot | latest | focus | recommend
+    try:
+        result = cicc_report_list(page=page, page_size=page_size, category=category,
+                                  source=source, category_id=category_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "reports": []})
+
+
+@app.route("/api/cicc-research/categories")
+def api_cicc_categories():
+    """返回可用报告分类列表"""
+    try:
+        return jsonify({"ok": True, "categories": cicc_get_categories()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "categories": []})
+
+
+@app.route("/api/cicc-research/report/<report_id>")
+def api_cicc_report_detail(report_id):
+    """获取单篇研究报告详情"""
+    try:
+        result = cicc_report_detail(report_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "report": None})
+
+
+@app.route("/api/cicc-research/search")
+def api_cicc_search():
+    """搜索中金研究报告"""
+    keyword = request.args.get("keyword", "").strip()
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("pageSize", 20))
+    if not keyword:
+        return jsonify({"ok": False, "error": "请输入搜索关键词", "reports": []})
+    try:
+        result = cicc_search_reports(keyword=keyword, page=page, page_size=page_size)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "reports": []})
+
+
+@app.route("/api/cicc-research/test")
+def api_cicc_test():
+    """测试 CICC Research 连接"""
+    try:
+        result = cicc_test_connection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "status": "error", "message": str(e)})
+
+
+@app.route("/api/cicc-research/cookies", methods=["POST"])
+def api_cicc_save_cookies():
+    """保存 CICC Research Cookies"""
+    try:
+        data = request.get_json()
+        cookies_input = data.get("cookies")
+        if not cookies_input:
+            return jsonify({"ok": False, "error": "未提供 cookies 数据"})
+        saved = cicc_save_cookies(cookies_input)
+        return jsonify({"ok": True, "cookie_count": len(saved)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/cicc-research/cookies-status")
+def api_cicc_cookies_status():
+    """获取 Cookies 配置状态"""
+    try:
+        return jsonify(cicc_cookies_status())
+    except Exception as e:
+        return jsonify({"has_cookies": False, "error": str(e)})
+
+
+@app.route("/api/cicc-research/clear-cache", methods=["POST"])
+def api_cicc_clear_cache():
+    """清除中金研究缓存"""
+    cicc_clear_cache()
+    return jsonify({"ok": True})
 
 
 # -- Entrypoint ----------------------------------------------------------------
